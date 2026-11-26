@@ -1,0 +1,1302 @@
+{
+  "excluded": [],
+  "binary_sha256": "a644d3b7b0f3e82246f2996073f5fe8d62cb3e3b6e67b68a74d01868d59b1937",
+  "sets": [
+    {
+      "id": "nullif-column_zero-none-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_nonzero-none-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-columns-none-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-scalar_column-none-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_left-none-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_right-none-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_zero-sparse-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_nonzero-sparse-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-columns-sparse-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-scalar_column-sparse-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_left-sparse-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_right-sparse-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_zero-half-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_nonzero-half-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-columns-half-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-scalar_column-half-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_left-half-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_right-half-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_zero-all-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_nonzero-all-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-columns-all-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-scalar_column-all-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_left-all-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_right-all-1024",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_zero-none-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_nonzero-none-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-columns-none-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-scalar_column-none-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_left-none-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_right-none-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_zero-sparse-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_nonzero-sparse-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-columns-sparse-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-scalar_column-sparse-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_left-sparse-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_right-sparse-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_zero-half-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_nonzero-half-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-columns-half-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-scalar_column-half-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_left-half-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_right-half-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_zero-all-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_nonzero-all-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-columns-all-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-scalar_column-all-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_left-all-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_right-all-8192",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_zero-none-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_nonzero-none-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-columns-none-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-scalar_column-none-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_left-none-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_right-none-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_zero-sparse-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_nonzero-sparse-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-columns-sparse-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-scalar_column-sparse-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_left-sparse-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_right-sparse-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_zero-half-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_nonzero-half-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-columns-half-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-scalar_column-half-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_left-half-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_right-half-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_zero-all-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-column_nonzero-all-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-columns-all-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-scalar_column-all-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_left-all-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    },
+    {
+      "id": "nullif-computed_right-all-262144",
+      "rows": 262144,
+      "comparisons": [
+        {
+          "mode": "spark-off",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        },
+        {
+          "mode": "spark-on",
+          "equal": true,
+          "left_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }",
+          "right_schema": "Schema { fields: [Field { name: \"r\", data_type: Float64, nullable: true }], metadata: {} }"
+        }
+      ]
+    }
+  ]
+}
