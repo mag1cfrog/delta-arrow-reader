@@ -1,0 +1,81 @@
+{
+  "canonical": {
+    "source": "1d74a82d50d68c75c119a5f7f9411e9d81767c0f",
+    "profile": "release",
+    "rustc": "1.96.0",
+    "binaries": {
+      "planning_attribution": "9d50a1ce13414397b01b3313b3af17e8d8e6feccddf04f049e7473135e8a0636",
+      "planning": "e4dd41aeac0e88aaadada605d7a771a31a47feade50a5b61db5fc6103c3cdb5d"
+    },
+    "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+    "overlays": {
+      "benches/planning.rs": "3943375027b4923aab4645aec54432644ba8df2eed942b8998fbcd9d0b5f89bd",
+      "benches/planning_attribution/driver.rs": "7c69c5d7aa05ec3a93b21cc7e732f6fe1f82d627d26994c6e774eabe85f441c9",
+      "benches/planning_attribution_fixture.rs": "60dab719c9e28e1236b3c5c5cd40e7df382dd1409235fb5f55fad4ffa9073694",
+      "benches/planning_attribution_entry.rs": "1beb885c8c2e141bed74b4a418e4783e1412bcf13e71225a8a101c355f6715df",
+      "Cargo.toml": "6da0541d63d01a9315a1e77d41faaefc34274a86cd180ed60795a9fb551035a6"
+    }
+  },
+  "observed": {
+    "source": "cd8351ee2073dc465f7b20a2fa61108414bcfa7f",
+    "profile": "release",
+    "rustc": "1.96.0",
+    "binaries": {
+      "planning_attribution": "409be902dc77d1a579c983054a6b3aa93e214110675a73dfe6d0a81a3e479619"
+    },
+    "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+    "overlays": {
+      "benches/planning_attribution/driver.rs": "b13201025091dda5223ab8bdc2b7599cf3b2eca95e07c606b7cdb7dbbc61aa4f",
+      "benches/planning_attribution_fixture.rs": "60dab719c9e28e1236b3c5c5cd40e7df382dd1409235fb5f55fad4ffa9073694",
+      "benches/planning_attribution_entry.rs": "1beb885c8c2e141bed74b4a418e4783e1412bcf13e71225a8a101c355f6715df",
+      "Cargo.toml": "6da0541d63d01a9315a1e77d41faaefc34274a86cd180ed60795a9fb551035a6",
+      "src/lib.rs": "ee99662e006d1540017bfc8f6c8ad0b02f0678742abd49448180301e315d3f55",
+      "vendor/sail/crates/sail-sql-analyzer/src/lib.rs": "52b4bc7b9574c60e0a1fd3509ccb5dca1b259fae5204d5137e34d75a2b23332b",
+      "vendor/sail/crates/sail-plan/src/lib.rs": "7c13f21213fea89f9278e817cdd70f65414f779d216a9b1402893adbaf82376c",
+      "vendor/dependencies/datafusion-optimizer/src/lib.rs": "8b8eb0caff68d0fe7136a068f6a6d1ca3a3b8a672ef4274d831bf1c63e1f989d",
+      "src/statement_planning.rs": "bdb266d96df1678e6d8742125264f949a7e62a8f04a13f2b0e5fa91d269dbb38",
+      "vendor/sail/crates/sail-sql-analyzer/src/parser.rs": "f015fa4e0b544e43f20bc2a06851c1d47c0e8853aeb22809070f28c8eaa47a26",
+      "vendor/dependencies/datafusion-optimizer/src/analyzer/mod.rs": "4fc3df4efa3b4622768c4c65894346523592a064f8ceb7612b8f089fa0912680",
+      "vendor/dependencies/datafusion-optimizer/src/optimizer.rs": "4a37d718accceb166e3519097ca2e5f1775baf6db36e8fb9cd9269d24cf00cdf",
+      "vendor/sail/crates/sail-plan/src/physical_plan/mod.rs": "16e96cba492593e872cc641ea55f64b03ae37e41e3a40ad44f65e1bb15d4ee66",
+      "src/planning_attribution.rs": "26b30b50bdb64f92706ae192b082c46a1bff7ab1293eaabc002fb8d4ffb144e9",
+      "vendor/sail/crates/sail-sql-analyzer/src/planning_attribution.rs": "26b30b50bdb64f92706ae192b082c46a1bff7ab1293eaabc002fb8d4ffb144e9",
+      "vendor/sail/crates/sail-plan/src/planning_attribution.rs": "26b30b50bdb64f92706ae192b082c46a1bff7ab1293eaabc002fb8d4ffb144e9",
+      "vendor/dependencies/datafusion-optimizer/src/planning_attribution.rs": "26b30b50bdb64f92706ae192b082c46a1bff7ab1293eaabc002fb8d4ffb144e9",
+      ".cargo/config.toml": "8f0dbfc5b709269fef2deaa3605e2ae437290a6aa8203678b1f21460c41e5cd7"
+    },
+    "observer_sha256": "ad41bc112ee52adf1b2fcf2678792dc8fa26fd24857187d48cd5815c1eb6229c",
+    "registry": {
+      "crate_sha256": "754ef4e8f073922a26f5b23133b9db4829342362b09be0bc94309cf261c2f098",
+      "observer_files": {
+        "src/execution/session_state.rs": "4aeb250e5393a48d2069a3507a6784d571af6652b50db701a4ba136469c27193",
+        "src/lib.rs": "a365291ef1649d97551643f704780cebd70adbaf290956d9a10964d3b4b37fb2",
+        "src/planning_attribution.rs": "26b30b50bdb64f92706ae192b082c46a1bff7ab1293eaabc002fb8d4ffb144e9",
+        "src/physical_planner.rs": "a794f81018a29865441d3643d4e815b8a655fed0b50c941ae227d94669630eb0"
+      }
+    }
+  },
+  "traces": {
+    "native-configured": {
+      "rows": 30,
+      "canonical_sha256": "87e7f32a720ac3af106f329adac9747b19b3ebe6f8074e77a93b1f859b1e08fe",
+      "observed_sha256": "87e7f32a720ac3af106f329adac9747b19b3ebe6f8074e77a93b1f859b1e08fe"
+    },
+    "spark-off": {
+      "rows": 309,
+      "canonical_sha256": "18a9367273413cfe24255ac80cab147e7fb80e9527b824bd4a8d3d942524153f",
+      "observed_sha256": "18a9367273413cfe24255ac80cab147e7fb80e9527b824bd4a8d3d942524153f"
+    },
+    "spark-on": {
+      "rows": 309,
+      "canonical_sha256": "6012dc16b9c4d50bad5a8b8ebb41d2dad5b9eafd289902660b98d26f421dcaf2",
+      "observed_sha256": "6012dc16b9c4d50bad5a8b8ebb41d2dad5b9eafd289902660b98d26f421dcaf2"
+    },
+    "native-plain": {
+      "rows": 30,
+      "canonical_sha256": "5818e119c178fae96bc4ec635b3a6cfd7a18afc7b53f9c2162f8317ad8b08045",
+      "observed_sha256": "5818e119c178fae96bc4ec635b3a6cfd7a18afc7b53f9c2162f8317ad8b08045"
+    }
+  },
+  "protocol_sha256": "f354d22b5604123792886896630f9a3d4d075edece8e2eb9e1ed894d1e6025e7"
+}
