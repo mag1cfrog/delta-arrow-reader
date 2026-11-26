@@ -191,7 +191,7 @@ def main():
     coverage = historical_gaps(rows)
     table = args.output / "macos-baseline-1560.csv"
     with table.open("x", newline="") as out:
-        writer = csv.DictWriter(out, fieldnames=FIELDS)
+        writer = csv.DictWriter(out, fieldnames=FIELDS, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
     timings = Counter(row["status"] for row in rows)
@@ -257,8 +257,10 @@ costs keep their projection reference.
 | --- | ---: |
 {groups}
 
-There are {timings['slower']} above-floor rows and {timings['untimable']} untimable
-rows in the table. #1560 owns the above-floor rows without another open issue.
+The statement archive contains 9,900 successful process records across nine
+blocks. There are {timings['slower']} above-floor rows and {timings['untimable']}
+untimable rows. {cases.get(1560, 0)} above-floor rows have no open issue owner
+and are assigned to #1560.
 
 Each x86 difference stays open for confirmation. The historical comparison
 uses statements with the same inputs and references. Mac comparisons that
