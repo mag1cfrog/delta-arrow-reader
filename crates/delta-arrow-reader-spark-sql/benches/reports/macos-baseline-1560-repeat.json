@@ -1,0 +1,242 @@
+{
+  "generator.generator.inline/spark-off": {
+    "status": "ok",
+    "before": 6.394958,
+    "after": 32.729334,
+    "delta": 26.355126000000002,
+    "floor": 0.7404995000000003,
+    "decision": "slower"
+  },
+  "generator.generator.inline/spark-on": {
+    "status": "ok",
+    "before": 6.394958,
+    "after": 33.044417,
+    "delta": 27.036997999999997,
+    "floor": 0.7404995000000003,
+    "decision": "slower"
+  },
+  "generator.generator.inline_outer/spark-off": {
+    "status": "ok",
+    "before": 0.14475,
+    "after": 45.852667,
+    "delta": 45.762041999999994,
+    "floor": 0.09887449999999999,
+    "decision": "slower"
+  },
+  "generator.generator.inline_outer/spark-on": {
+    "status": "ok",
+    "before": 0.14475,
+    "after": 44.641834,
+    "delta": 44.497084,
+    "floor": 0.09887449999999999,
+    "decision": "slower"
+  },
+  "scalar.conditional.nanvl/spark-off": {
+    "status": "ok",
+    "before": 1.332459,
+    "after": 4.220166,
+    "delta": 2.931375,
+    "floor": 0.25245850000000003,
+    "decision": "slower"
+  },
+  "scalar.conditional.nanvl/spark-on": {
+    "status": "ok",
+    "before": 1.332459,
+    "after": 4.298,
+    "delta": 2.966124,
+    "floor": 0.25245850000000003,
+    "decision": "slower"
+  },
+  "scalar.conditional.nullif/spark-off": {
+    "status": "ok",
+    "before": 2.537375,
+    "after": 17.257208,
+    "delta": 14.716541,
+    "floor": 0.500646,
+    "decision": "slower"
+  },
+  "scalar.conditional.nullif/spark-on": {
+    "status": "ok",
+    "before": 2.537375,
+    "after": 16.577458,
+    "delta": 14.234668000000001,
+    "floor": 0.500646,
+    "decision": "slower"
+  },
+  "scalar.datetime.convert_timezone/spark-off": {
+    "status": "ok",
+    "before": 0.263,
+    "after": 78.399459,
+    "delta": 78.095626,
+    "floor": 0.046375499999999986,
+    "decision": "slower"
+  },
+  "scalar.datetime.convert_timezone/spark-on": {
+    "status": "ok",
+    "before": 0.263,
+    "after": 78.259208,
+    "delta": 78.013458,
+    "floor": 0.046375499999999986,
+    "decision": "slower"
+  },
+  "scalar.datetime.from_utc_timestamp/spark-off": {
+    "status": "ok",
+    "before": 0.154791,
+    "after": 82.753791,
+    "delta": 82.599,
+    "floor": 0.0593755,
+    "decision": "slower"
+  },
+  "scalar.datetime.from_utc_timestamp/spark-on": {
+    "status": "ok",
+    "before": 0.154791,
+    "after": 82.845792,
+    "delta": 82.69383400000001,
+    "floor": 0.0593755,
+    "decision": "slower"
+  },
+  "scalar.datetime.to_utc_timestamp/spark-off": {
+    "status": "ok",
+    "before": 0.155584,
+    "after": 81.584208,
+    "delta": 81.42491700000001,
+    "floor": 0.02797949999999999,
+    "decision": "slower"
+  },
+  "scalar.datetime.to_utc_timestamp/spark-on": {
+    "status": "ok",
+    "before": 0.155584,
+    "after": 83.072084,
+    "delta": 82.929208,
+    "floor": 0.02797949999999999,
+    "decision": "slower"
+  },
+  "scalar.math.op_2a/spark-off": {
+    "status": "ok",
+    "before": 2.531417,
+    "after": 2.4645,
+    "delta": -0.09308399999999972,
+    "floor": 0.30437400000000014,
+    "decision": "within floor"
+  },
+  "scalar.math.op_2a/spark-on": {
+    "status": "ok",
+    "before": 2.531417,
+    "after": 13.091583,
+    "delta": 10.384334,
+    "floor": 0.30437400000000014,
+    "decision": "slower"
+  },
+  "scalar.math.op_2b/spark-off": {
+    "status": "ok",
+    "before": 2.343167,
+    "after": 2.193834,
+    "delta": -0.1662490000000001,
+    "floor": 0.26666650000000014,
+    "decision": "within floor"
+  },
+  "scalar.math.op_2b/spark-on": {
+    "status": "ok",
+    "before": 2.343167,
+    "after": 12.446249,
+    "delta": 10.103082,
+    "floor": 0.26666650000000014,
+    "decision": "slower"
+  },
+  "scalar.math.op_2d/spark-off": {
+    "status": "ok",
+    "before": 2.451792,
+    "after": 2.389458,
+    "delta": -0.15379200000000015,
+    "floor": 0.9660209999999998,
+    "decision": "within floor"
+  },
+  "scalar.math.op_2d/spark-on": {
+    "status": "ok",
+    "before": 2.451792,
+    "after": 12.36325,
+    "delta": 9.89525,
+    "floor": 0.9660209999999998,
+    "decision": "slower"
+  },
+  "scalar.math.try_add/spark-off": {
+    "status": "ok",
+    "before": 2.32725,
+    "after": 12.292792,
+    "delta": 9.923666,
+    "floor": 0.47735399999999995,
+    "decision": "slower"
+  },
+  "scalar.math.try_add/spark-on": {
+    "status": "ok",
+    "before": 2.32725,
+    "after": 12.218249,
+    "delta": 9.901582999999999,
+    "floor": 0.47735399999999995,
+    "decision": "slower"
+  },
+  "scalar.math.try_multiply/spark-off": {
+    "status": "ok",
+    "before": 2.58275,
+    "after": 12.9705,
+    "delta": 10.28046,
+    "floor": 0.2085204999999999,
+    "decision": "slower"
+  },
+  "scalar.math.try_multiply/spark-on": {
+    "status": "ok",
+    "before": 2.58275,
+    "after": 13.040459,
+    "delta": 10.416291999999999,
+    "floor": 0.2085204999999999,
+    "decision": "slower"
+  },
+  "scalar.math.try_subtract/spark-off": {
+    "status": "ok",
+    "before": 2.362583,
+    "after": 12.298125,
+    "delta": 9.935542000000002,
+    "floor": 0.4786665000000001,
+    "decision": "slower"
+  },
+  "scalar.math.try_subtract/spark-on": {
+    "status": "ok",
+    "before": 2.362583,
+    "after": 12.277209,
+    "delta": 9.914625999999998,
+    "floor": 0.4786665000000001,
+    "decision": "slower"
+  },
+  "scalar.predicate.like/spark-off": {
+    "status": "ok",
+    "before": 6.514126,
+    "after": 19.863041,
+    "delta": 13.489249,
+    "floor": 0.5066455000000003,
+    "decision": "slower"
+  },
+  "scalar.predicate.like/spark-on": {
+    "status": "ok",
+    "before": 6.514126,
+    "after": 19.713958,
+    "delta": 12.947500000000002,
+    "floor": 0.5066455000000003,
+    "decision": "slower"
+  },
+  "scalar.string.encode/spark-off": {
+    "status": "ok",
+    "before": 0.246875,
+    "after": 1.753542,
+    "delta": 1.518125,
+    "floor": 0.04714549999999999,
+    "decision": "slower"
+  },
+  "scalar.string.encode/spark-on": {
+    "status": "ok",
+    "before": 0.246875,
+    "after": 1.625876,
+    "delta": 1.3932909999999998,
+    "floor": 0.04714549999999999,
+    "decision": "slower"
+  }
+}
