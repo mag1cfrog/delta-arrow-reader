@@ -25,7 +25,7 @@ use crate::{OptimizerConfig, OptimizerRule};
 use std::sync::Arc;
 
 use datafusion_common::{
-    Column, DFSchema, HashMap, JoinType, Result, assert_eq_or_internal_err,
+    Column, DFSchema, HashMap, HashSet, JoinType, Result, assert_eq_or_internal_err,
     get_required_group_by_exprs_indices, internal_datafusion_err, internal_err,
 };
 use datafusion_expr::expr::Alias;
@@ -891,13 +891,16 @@ fn rewrite_projection_given_requirements(
 
     let exprs_used = indices.get_at_indices(&expr);
 
-    let required_indices =
-        RequiredIndices::new().with_exprs(input.schema(), exprs_used.iter());
+    let required_indices = if renames_all_scan_columns_in_order(&input, &exprs_used) {
+        RequiredIndices::new_for_all_exprs(&input)
+    } else {
+        RequiredIndices::new().with_exprs(input.schema(), exprs_used.iter())
+    };
 
     // rewrite the children projection, and if they are changed rewrite the
     // projection down
-    optimize_projections(Arc::unwrap_or_clone(input), config, required_indices)?
-        .transform_data(|input| {
+    optimize_projections(Arc::unwrap_or_clone(input), config, required_indices)?.transform_data(
+        |input| {
             if is_projection_unnecessary(&input, &exprs_used)? {
                 Ok(Transformed::yes(input))
             } else {
@@ -905,7 +908,35 @@ fn rewrite_projection_given_requirements(
                     .map(LogicalPlan::Projection)
                     .map(Transformed::yes)
             }
-        })
+        },
+    )
+}
+
+fn renames_all_scan_columns_in_order(input: &LogicalPlan, exprs: &[Expr]) -> bool {
+    let LogicalPlan::TableScan(scan) = input else {
+        return false;
+    };
+    let schema = &scan.projected_schema;
+    if exprs.len() < 64
+        || exprs.len() != schema.fields().len()
+        || !matches!(exprs.first(), Some(Expr::Alias(_)))
+    {
+        return false;
+    }
+    // Verify that the old name lookup would resolve each alias to its ordinal.
+    let mut names = HashSet::with_capacity(exprs.len());
+    schema.iter().zip(exprs).all(|((qualifier, field), expr)| {
+        let Expr::Alias(alias) = expr else {
+            return false;
+        };
+        let Expr::Column(column) = alias.expr.as_ref() else {
+            return false;
+        };
+        qualifier == Some(&scan.table_name)
+            && column.relation.as_ref() == qualifier
+            && column.name.as_str() == field.name()
+            && names.insert(field.name().as_str())
+    }) && names.len() == exprs.len()
 }
 
 /// Projection is unnecessary, when
