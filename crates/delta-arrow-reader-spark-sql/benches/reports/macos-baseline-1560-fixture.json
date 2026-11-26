@@ -1,0 +1,100 @@
+{
+  "snapshot_matches": true,
+  "source_scale_factor": 1,
+  "source_commit": "8954dcec63f934359c7bcdb74b5220c842d898e4",
+  "source_table": "wide.clustered",
+  "stored_columns": 80,
+  "snapshot_columns": 81,
+  "snapshot_version": 0,
+  "rows": 6001215,
+  "checks": {
+    "base_delta_log_sha256": {
+      "macos": "8ffd867bc4c1966190472cf68d7277e9363645bfee992d28ee3938eb1cc1f2a2",
+      "linux_reference": "8ffd867bc4c1966190472cf68d7277e9363645bfee992d28ee3938eb1cc1f2a2",
+      "match": true
+    },
+    "derived_delta_log_sha256": {
+      "macos": "21d2257a5c6d201f74c2c3516a134095c2f4efb680595cbd56228ae6581e71cb",
+      "linux_reference": "21d2257a5c6d201f74c2c3516a134095c2f4efb680595cbd56228ae6581e71cb",
+      "match": true
+    },
+    "source_manifest_sha256": {
+      "macos": "565cfb89cebccd9f72390b3eeeff1aa476b1049cc86c18b80955b5c886953bae",
+      "linux_reference": "37906576c32e8c1c2ca7b3920f11ccd107c00633851d05e15e1f1db112305bc5",
+      "match": false
+    },
+    "generator_executable_sha256": {
+      "macos": "7c342b5f59f529b49480c9ac320f4e8edb2fcc39427af672932b51a5774df576",
+      "linux_reference": "7c84c270b88595559854ade637873e13b776a24e8ebc53310128cfa0f86441d4",
+      "match": false
+    },
+    "generator_lockfile_sha256": {
+      "macos": "2d1c035a3c655ce09668182e30a8d578f30fa07020ea8a02815f1cf712fc6daa",
+      "linux_reference": "2d1c035a3c655ce09668182e30a8d578f30fa07020ea8a02815f1cf712fc6daa",
+      "match": true
+    },
+    "files": [
+      {
+        "path": "part-00000.parquet",
+        "file_bucket": 0,
+        "rows": 1048576,
+        "macos": "8886fe3d5670f0559525e914b24c931896e45370aa07fcdbf79065d6d1021579",
+        "linux_reference": "8886fe3d5670f0559525e914b24c931896e45370aa07fcdbf79065d6d1021579",
+        "match": true
+      },
+      {
+        "path": "part-00001.parquet",
+        "file_bucket": 1,
+        "rows": 1048576,
+        "macos": "65ab912b14e24e6250900a32f91aad3d6961f0490cc4f5d0466e57fd3a5d29fc",
+        "linux_reference": "65ab912b14e24e6250900a32f91aad3d6961f0490cc4f5d0466e57fd3a5d29fc",
+        "match": true
+      },
+      {
+        "path": "part-00002.parquet",
+        "file_bucket": 2,
+        "rows": 1048576,
+        "macos": "15c2db0931adb17fb2b257eb9481b251863cb60e2624075683f05fa0d9724d35",
+        "linux_reference": "15c2db0931adb17fb2b257eb9481b251863cb60e2624075683f05fa0d9724d35",
+        "match": true
+      },
+      {
+        "path": "part-00003.parquet",
+        "file_bucket": 3,
+        "rows": 1048576,
+        "macos": "f0338fbec7d68a61ed76ad40e545ff573d1e7ad0074872ba736f8c07fc5e8aea",
+        "linux_reference": "f0338fbec7d68a61ed76ad40e545ff573d1e7ad0074872ba736f8c07fc5e8aea",
+        "match": true
+      },
+      {
+        "path": "part-00004.parquet",
+        "file_bucket": 4,
+        "rows": 1048576,
+        "macos": "f434eb6accf21b56b4e0583235736bf2a78ce7ad4e3021db1efda1bb4f22729d",
+        "linux_reference": "f434eb6accf21b56b4e0583235736bf2a78ce7ad4e3021db1efda1bb4f22729d",
+        "match": true
+      },
+      {
+        "path": "part-00005.parquet",
+        "file_bucket": 5,
+        "rows": 758335,
+        "macos": "9d01eed319ccef5bc52b6f5114ccb134a458d485133ee2bc5ab8a38e7187f670",
+        "linux_reference": "9d01eed319ccef5bc52b6f5114ccb134a458d485133ee2bc5ab8a38e7187f670",
+        "match": true
+      }
+    ]
+  },
+  "generator": {
+    "arrow": "58.4.0",
+    "datafusion_sort": "54.1.0",
+    "executable_sha256": "7c342b5f59f529b49480c9ac320f4e8edb2fcc39427af672932b51a5774df576",
+    "lockfile_sha256": "2d1c035a3c655ce09668182e30a8d578f30fa07020ea8a02815f1cf712fc6daa",
+    "parquet": "58.4.0",
+    "target": "aarch64-macos",
+    "tpchgen": "3.0.0",
+    "tpchgen_git": "4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7"
+  },
+  "fixture_recipe_sha256": "511ab72b364235e495f2fbe852d0a951e809f32c5e9eabb63dee3749a69ba1c7",
+  "reference_receipt_sha256": "9eb1e98be9381de74bd8908ac540c91eec6f0b0862089d1655baca537f43301d",
+  "reference_commands_sha256": "c3368f7e2ddd78f4cf8d7393fcc23140b6e93484b21681fb96b4e95790af3491"
+}

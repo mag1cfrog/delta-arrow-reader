@@ -1,0 +1,10 @@
+{
+  "original_protocol_commit": "816b412f24a1203d7ba6f118f3a2727c599c4e9e",
+  "archive_sha256": "617f9445f3aea1a5b9c11efc941ff8fa2a867ffa0f1a13fe7bece7ae8369dada",
+  "original_start_epoch": 1795637205,
+  "macos_boot_epoch": 1794636455,
+  "completed_processes": 1230,
+  "last_complete_slot": "09-006-spark-off",
+  "interrupted_slot": "09-007-a",
+  "interrupted_stdout_sha256": "d532997962dea524e7b4783b0c7f983df151cfff32da1d2d70444ce5b9778253"
+}

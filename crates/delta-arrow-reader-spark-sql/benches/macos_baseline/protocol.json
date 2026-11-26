@@ -1,0 +1,33 @@
+{
+  "staging_source": "70a77d2df0ab6a475211a361c6e5048f01c73df3",
+  "blocks": 9,
+  "maximum_samples": 9,
+  "function_preflight_seconds": 21600,
+  "function_sweep_seconds": 43200,
+  "cell_session_seconds": 43200,
+  "initial_samples": {
+    "functions": 3,
+    "execution": 3,
+    "planning": 3,
+    "planning_attribution": 3,
+    "parsers": 3,
+    "casts-date": 3,
+    "strings": 3,
+    "nullif_620": 3,
+    "nullif_620_recheck": 3,
+    "functions_1406": 3,
+    "regression_windows_1512": 3,
+    "pending_range_1099": 7,
+    "pending_range_1099_isolated": 7,
+    "footprint": 1
+  },
+  "noise_cells": [
+    {"label": "function-near-20", "suite": "functions", "id": "scalar.string.left", "configuration": "spark-off"},
+    {"label": "function-near-100", "suite": "functions", "id": "generator.generator.inline_outer", "configuration": "spark-off"},
+    {"label": "function-near-700", "suite": "functions", "id": "window.window.percentile", "configuration": "spark-off"},
+    {"label": "wide-400-planning", "suite": "planning_attribution", "id": "stress/wide_400", "configuration": "spark-off", "metric": "physical_ns"},
+    {"label": "interval-day-time", "suite": "parsers", "id": "interval_day_time", "configuration": "spark-off", "expected_rows": 8184},
+    {"label": "sf1-substring", "suite": "strings", "id": "substring_only", "configuration": "spark-off", "expected_rows": 6001215},
+    {"label": "nullif-columns", "suite": "nullif_620", "id": "nullif-columns-sparse-8192", "configuration": "spark-off"}
+  ]
+}
