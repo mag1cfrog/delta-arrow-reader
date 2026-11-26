@@ -104,6 +104,7 @@ def trial(cases, args, settings, counts, stream, data, phase, *, aa_only=False):
                 if len(values) == len(participants):
                     ns = values["after"] - values["before"] if controls else values[arm]
                     metrics[label][arm].append(ns)
+        print(f"{phase}: block {block + 1}/{blocks}", flush=True)
     summary = {}
     for label, series in metrics.items():
         if failures[label]:

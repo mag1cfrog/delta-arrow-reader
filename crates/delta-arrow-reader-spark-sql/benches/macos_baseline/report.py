@@ -184,8 +184,9 @@ def main():
     n = read(args.noise)
     fixture = read(args.fixture)
     checks = read(args.self_checks)
-    rows = (functions(read(args.function_eligibility), read(args.sweep), read(args.repeat))
-            + statements(read(args.statements), args.statement_samples))
+    eligibility = read(args.function_eligibility)
+    sweep, repeat = read(args.sweep), read(args.repeat)
+    rows = functions(eligibility, sweep, repeat) + statements(read(args.statements), args.statement_samples)
     rows = safe_record(rows, ())
     coverage = historical_gaps(rows)
     table = args.output / "macos-baseline-1560.csv"
@@ -201,6 +202,8 @@ def main():
     groups = "\n".join(f"| #{issue} | {count} |" for issue, count in sorted(cases.items()))
     history = "\n".join(f"| #{issue} | {count} |" for issue, count in sorted(coverage.items()))
     passed = sum(row["status"] == "passed" for row in checks["checks"].values())
+    eligible = sum(row["status"] == "eligible" for row in eligibility["results"])
+    repeated = {key.rsplit("/", 1)[0] for key in repeat}
     bands = ", ".join(f"{suite} {count}" for suite, count in sorted(n["samples"].items()))
     proof = "byte-identical Parquet files and Delta logs" if fixture["snapshot_matches"] else "decoded equality"
     assert fixture["snapshot_matches"] or fixture.get("content_matches")
@@ -216,6 +219,7 @@ The host-specific generator executable and preparation manifest have different
 hashes. A full export through the stock CLI matched every decoded row. The
 export proof records the Parquet and executed Arrow types for all 81 columns.
 [Stock CLI export proof](macos-baseline-1560-stock-export.json).
+[Harness self-checks](macos-baseline-1560-self-check.json).
 
 ## A/A floors
 
@@ -229,6 +233,18 @@ projection. Planning, SF1 and NULLIF values are ns per statement.
 Nine blocks are fixed. Retained samples per process are {bands}.
 
 ## Baseline
+
+Function preflight accounted for all 633 entries and admitted {eligible} to
+the initial sweep. The nine-sample repeat covered {len(repeated)} functions
+that were slower than their native reference in at least one ANSI mode.
+[Function eligibility](macos-baseline-1560-function-eligibility.json.gz).
+
+Codex Desktop restarted in block nine. The continuation verified and kept
+the 1,230 complete process records, reran the interrupted shard from its
+first arm, and completed the schedule on the same Mac and boot. The interrupted
+process's 24 retained samples are archived separately from the comparison.
+[Recovery protocol](../macos_baseline/protocol.md),
+[interrupted samples](macos-baseline-1560-functions-interrupted.jsonl.gz).
 
 **Apple Silicon, native macOS.** The [baseline CSV](macos-baseline-1560.csv) has
 both ANSI rows for all 633 function entries and the planning, parser, string,
