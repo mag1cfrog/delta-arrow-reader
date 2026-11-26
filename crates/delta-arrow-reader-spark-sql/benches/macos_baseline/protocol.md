@@ -112,3 +112,19 @@ and `cells` each use a fresh evidence directory and write their compressed raw
 samples and summary there. Pass the noise summary to `repeat` and `cells` to
 bind the retained sample counts. The report generator reads both function
 summaries and the non-function summary and raw samples.
+
+## Desktop restart during block nine
+
+Codex Desktop restarted after block nine's sixth shard. The Mac stayed on the
+same boot. `sweep-recovery.json` identifies the original protocol, release-run
+archive, completed prefix and interrupted process. Keep the 1,230 completed
+process records in their original order and archive the interrupted stdout
+separately. Start the continuation with the first arm of shard seven so all
+comparison arms for each shard stay together. The interrupted process's 24
+retained samples do not enter the comparison.
+
+`run.py sweep --resume-sweep ORIGINAL_EVIDENCE` verifies the boot, host,
+protocol, release binary, eligibility, schedule and recorded slot order. It
+rechecks the session controls and sleep prevention before launching another
+process. The original 12-hour deadline includes the interruption. The sample
+counts, all nine blocks, paired medians and floor calculation stay the same.

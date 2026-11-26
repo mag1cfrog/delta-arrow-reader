@@ -1,19 +1,23 @@
 """Run the committed Apple Silicon baseline sessions and retain raw samples."""
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
+import re
 import sys
 import time
+import zlib
 
 sys.dont_write_bytecode = True
 import cells
-from build import digest
-from native import BENCHES, HERE, REPO, archive, check_host, emit, legacy_runner, paired, safe_record, session
+from build import digest, git
+from native import BENCHES, HERE, REPO, archive, check_host, command, emit, legacy_runner, paired, safe_record, session
 
 PROTOCOL = HERE / "protocol.json"
 REPORTS = BENCHES / "reports"
 ARMS = ("before", "after", "a", "b")
+RECOVERY = HERE / "sweep-recovery.json"
 
 
 def source_receipt(binaries):
@@ -183,7 +187,30 @@ def preflight_functions(args, settings, *, noise_only=False):
                 "manifest_sha256": digest(cells.FUNCTIONS), "fixture": check, "results": eligibility})
 
 
-def sharded(args, settings, stream, *, repeat):
+def load_sweep_recovery(directory, header, settings):
+    spec = cells.read(RECOVERY)
+    assert git(REPO, "show", f"HEAD:{RECOVERY.relative_to(REPO)}") == RECOVERY.read_text().strip()
+    boot = re.search(r"sec\s*=\s*(\d+)", command("/usr/sbin/sysctl", "-n", "kern.boottime"))
+    assert boot and int(boot[1]) == spec["macos_boot_epoch"]
+    assert int(directory.stat().st_birthtime) == spec["original_start_epoch"]
+    raw = (directory / "samples.jsonl.gz").read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == spec["archive_sha256"]
+    source = zlib.decompressobj(wbits=31)
+    decoded = source.decompress(raw)
+    assert not source.eof and decoded.endswith(b"\n"), "expected an interrupted gzip with complete records"
+    first, *records = (json.loads(line) for line in decoded.splitlines())
+    original = spec["original_protocol_commit"]
+    assert first == {**header, "protocol_commit": original}
+    assert len(records) == spec["completed_processes"]
+    assert Path(records[-1]["command"][-2]).name == spec["last_complete_slot"] + ".ids.json"
+    partial = directory / spec["interrupted_slot"] / "stdout.jsonl"
+    assert digest(partial) == spec["interrupted_stdout_sha256"]
+    remaining = spec["original_start_epoch"] + settings["function_sweep_seconds"] - time.time()
+    assert remaining > 0, "the original sweep deadline expired"
+    return spec, iter(records), time.monotonic() + remaining
+
+
+def sharded(args, settings, stream, *, repeat, recovery=None):
     schedule = cells.read(BENCHES / "functions/schedule.json")
     preflight = cells.read(args.eligibility)
     binary = args.binaries / "functions"
@@ -197,6 +224,9 @@ def sharded(args, settings, stream, *, repeat):
     ids = sorted(work.keys() & pairs)
     count = cells.read(args.frozen_noise)["samples"]["functions"] if repeat else schedule["samples_per_case"]
     deadline = time.monotonic() + settings["function_sweep_seconds"]
+    if recovery:
+        recovery_spec, recorded, deadline = recovery
+        interrupted_slot = recovery_spec["interrupted_slot"]
     metrics = {case: {} for case in ids}
     failure = {}
     bounds = roots(args)
@@ -215,9 +245,18 @@ def sharded(args, settings, stream, *, repeat):
                                 (arm != "native" or work[case]["class"] == "paired")]
                     if not selected:
                         continue
-                    check_host()
                     path = args.output / f"{block + 1:02}-{shard + 1:03}-{arm}"
-                    result = cells.function_set(binary, selected, config, count, path, deadline, schedule, runner)
+                    result = next(recorded, None) if recovery else None
+                    if result is not None:
+                        assert result["block"] == block + 1 and result["arm"] == arm and result["ids"] == selected
+                        assert result["sample_count"] == count and result["command"][-1] == config
+                        assert Path(result["command"][-2]).name == path.name + ".ids.json"
+                    else:
+                        if recovery and interrupted_slot:
+                            assert path.name == interrupted_slot, "recovery does not start at the interrupted shard"
+                            interrupted_slot = None
+                        check_host()
+                        result = cells.function_set(binary, selected, config, count, path, deadline, schedule, runner)
                     emit(stream, {"kind": "process", "block": block + 1, "arm": arm, "ids": selected,
                                   "sample_count": count, **result}, bounds)
                     for case in selected:
@@ -240,6 +279,8 @@ def sharded(args, settings, stream, *, repeat):
                         else:
                             metrics[case].setdefault(arm, []).append(ns)
             print(f"Function {'repeat' if repeat else 'sweep'} block {block + 1}/{blocks}", flush=True)
+    if recovery:
+        assert not interrupted_slot and next(recorded, None) is None
     outcome = {}
     for case in ids:
         series = metrics[case]
@@ -263,9 +304,10 @@ def main():
     for name in ("binaries", "output"):
         cli.add_argument(name, type=lambda path: Path(path).resolve())
     for name in ("fixture", "nullif-eligible", "eligibility", "cell-eligibility", "frozen-noise", "first-sweep",
-                 "candidate", "manifest", "range-eligible", "stock-cli"):
+                 "candidate", "manifest", "range-eligible", "stock-cli", "resume-sweep"):
         cli.add_argument(f"--{name}", type=lambda path: Path(path).resolve())
     args = cli.parse_args()
+    assert args.resume_sweep is None or args.operation == "sweep"
     settings = cells.read(PROTOCOL)
     assert not args.output.is_relative_to(REPO)
     receipt = source_receipt(args.binaries)
@@ -278,20 +320,23 @@ def main():
         return
     with session(PROTOCOL) as binding:
         if args.manifest:
-            from build import git
             assert git(REPO, "show", f"HEAD:{args.manifest.relative_to(REPO)}") == args.manifest.read_text().strip()
         args.output.mkdir()
         with archive(args.output / "samples.jsonl.gz") as stream:
             uses = {key: digest(path) for key in ("eligibility", "frozen_noise", "first_sweep", "cell_eligibility", "nullif_eligible")
                     if (path := getattr(args, key)) is not None}
-            emit(stream, {"kind": "session", **binding, "operation": args.operation, "build": receipt,
-                          "settings_sha256": digest(PROTOCOL), "manifest_sha256": digest(args.manifest) if args.manifest else None,
-                          "receipts": uses,
-                          "candidate": source_receipt(args.candidate) if args.candidate else None})
+            header = {"kind": "session", **binding, "operation": args.operation, "build": receipt,
+                      "settings_sha256": digest(PROTOCOL), "manifest_sha256": digest(args.manifest) if args.manifest else None,
+                      "receipts": uses,
+                      "candidate": source_receipt(args.candidate) if args.candidate else None}
+            recovery = load_sweep_recovery(args.resume_sweep, header, settings) if args.resume_sweep else None
+            if recovery:
+                header["recovery"] = recovery[0]
+            emit(stream, header)
             if args.operation == "noise":
                 result = noise(args, settings, stream, receipt)
             elif args.operation in ("sweep", "repeat"):
-                result = sharded(args, settings, stream, repeat=args.operation == "repeat")
+                result = sharded(args, settings, stream, repeat=args.operation == "repeat", recovery=recovery)
             else:
                 counts = cells.read(args.frozen_noise)["samples"]
                 proof = cells.read(args.cell_eligibility)
