@@ -1,0 +1,141 @@
+{
+  "machine": "Apple Silicon, native macOS",
+  "routine": "__ZN15datafusion_expr12logical_plan4plan17projection_schema17haeb7465c1298a0c8E",
+  "method": "Disassembly is bounded by the routine's Mach-O symbol and the next text symbol. The entry comparison strips instruction addresses before the first control transfer or page-relative relocation, preserving all non-address operands and entry stack offsets.",
+  "builds": {
+    "staging": {
+      "source": "1d74a82d50d68c75c119a5f7f9411e9d81767c0f",
+      "binary_sha256": "9d50a1ce13414397b01b3313b3af17e8d8e6feccddf04f049e7473135e8a0636",
+      "instruction_count": 262,
+      "entry_normalized": [
+        "stp x28, x27, [sp, #-0x60]!",
+        "stp x26, x25, [sp, #0x10]",
+        "stp x24, x23, [sp, #0x20]",
+        "stp x22, x21, [sp, #0x30]",
+        "stp x20, x19, [sp, #0x40]",
+        "stp x29, x30, [sp, #0x50]",
+        "add x29, sp, #0x50",
+        "sub sp, sp, #0x220",
+        "mov x20, x2",
+        "mov x22, x1",
+        "mov x21, x0",
+        "mov x19, x8"
+      ],
+      "local_stack_bytes": 544,
+      "saved_register_bytes": 96,
+      "entry_stack_bytes": 640
+    },
+    "candidate": {
+      "source": "d1c8dd18561dfa7139ae32bb7f62250e9ad81d95",
+      "binary_sha256": "3f75e185a1723a52b6f1f75ccc81a1c8a5354ac8a14b560c605ff7d99755f0c3",
+      "instruction_count": 463,
+      "entry_normalized": [
+        "stp x28, x27, [sp, #-0x60]!",
+        "stp x26, x25, [sp, #0x10]",
+        "stp x24, x23, [sp, #0x20]",
+        "stp x22, x21, [sp, #0x30]",
+        "stp x20, x19, [sp, #0x40]",
+        "stp x29, x30, [sp, #0x50]",
+        "add x29, sp, #0x50",
+        "sub sp, sp, #0x240",
+        "mov x20, x2",
+        "mov x22, x1",
+        "mov x21, x0",
+        "mov x19, x8",
+        "sub x25, x29, #0xe0",
+        "add x26, sp, #0x90"
+      ],
+      "local_stack_bytes": 576,
+      "saved_register_bytes": 96,
+      "entry_stack_bytes": 672
+    }
+  },
+  "unchanged_state_source_sha256": {
+    "datafusion-common/src/dfschema.rs": "463b8438b7f400bc404647d20976e5745220daa448a15f5affc617761290a37a",
+    "datafusion-common/src/datatype.rs": "56218cdf127408537542f779b09e34494f937eb1cce793af34a2ce61a20b07ba",
+    "datafusion-expr/src/expr.rs": "0581b10940e302ae0198d6e82a346e005945987f5334e464d8fb9b32648ef934",
+    "Projection": "055c3eb9339d5239424c0a98626de3e324f554382acfe26b806cf872748d6825",
+    "TableScan": "fe66bea94c6b074dfccc7f04f6db033975d3fd936b04f17fd38a20b8292e3164"
+  },
+  "controls": [
+    {
+      "case": "paired/having",
+      "configuration": "native-plain",
+      "metric": "logical_ns",
+      "status": "ok",
+      "before": 68708,
+      "after": 112666,
+      "delta": 47043,
+      "floor": 35916.5,
+      "decision": "slower",
+      "route": "Native SQL SELECT planner calls the projection builder.",
+      "decision_after_layout": "gate stands"
+    },
+    {
+      "case": "paired/having",
+      "configuration": "native-plain",
+      "metric": "physical_ns",
+      "status": "ok",
+      "before": 225041,
+      "after": 381083,
+      "delta": 154000,
+      "floor": 124125.5,
+      "decision": "slower",
+      "route": "The HAVING plan enters OptimizeProjections. The #1571 observer recorded the rule on every retained native plan.",
+      "decision_after_layout": "gate stands"
+    },
+    {
+      "case": "paired/having",
+      "configuration": "native-plain",
+      "metric": "total_ns",
+      "status": "ok",
+      "before": 295875,
+      "after": 492834,
+      "delta": 201001,
+      "floor": 160042.0,
+      "decision": "slower",
+      "route": "The HAVING plan enters OptimizeProjections. The #1571 observer recorded the rule on every retained native plan.",
+      "decision_after_layout": "gate stands"
+    },
+    {
+      "case": "paired/cte_chain",
+      "configuration": "native-plain",
+      "metric": "logical_ns",
+      "status": "ok",
+      "before": 117666,
+      "after": 182500,
+      "delta": 60459,
+      "floor": 54500.0,
+      "decision": "slower",
+      "route": "Native SQL SELECT planner calls the projection builder.",
+      "decision_after_layout": "gate stands"
+    },
+    {
+      "case": "stress/wide_400",
+      "configuration": "spark-off",
+      "metric": "logical_ns",
+      "status": "ok",
+      "before": 2118917,
+      "after": 2186583,
+      "delta": 54083,
+      "floor": 46917.0,
+      "decision": "slower",
+      "route": "The Sail query resolver constructs projections before physical lowering.",
+      "decision_after_layout": "gate stands"
+    },
+    {
+      "case": "stress/wide_400",
+      "configuration": "spark-on",
+      "metric": "logical_ns",
+      "status": "ok",
+      "before": 2117125,
+      "after": 2162625,
+      "delta": 47166,
+      "floor": 12791.5,
+      "decision": "slower",
+      "route": "The Sail query resolver constructs projections before physical lowering.",
+      "decision_after_layout": "gate stands"
+    }
+  ],
+  "trace_limit": "The exact-release breakpoint attempt for native HAVING timed out. Control routes use the matched canonical plans and committed source. The #1571 instrumented release also recorded native logical resolution and the physical projection rule on 162 HAVING samples."
+}
