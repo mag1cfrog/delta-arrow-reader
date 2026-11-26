@@ -202,6 +202,14 @@ This local change addresses the dependency lookup attributed in the
 [wide planning report](benches/reports/planning-1390-round2-wide-metadata.md).
 The [schema tests](tests/projection_columns/dependencies.rs) check both routes.
 
+The physical-plan fork reuses empty properties for full-width ordered column
+projections whose inputs have empty equivalence, ordering and constraint state
+and no hash partitioning. The projector still determines the Arrow schema and
+all other plans use the existing projection mapping and property derivation.
+The [macOS constructor attribution](benches/reports/planning-1390-macos-projection-properties-attribution.md)
+locates the mapping and equivalence work inside the initial wide projection.
+[Property differential](tests/ordered_physical_projection_properties.rs).
+
 Two original overrides, `datafusion-expr-common` and `arrow-select`, were identical
 to their pinned registry packages. They use those packages directly; the inventory
 retains their accepted file hashes and registry mappings.

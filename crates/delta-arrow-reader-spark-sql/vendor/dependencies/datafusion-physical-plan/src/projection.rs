@@ -49,7 +49,8 @@ use datafusion_common::tree_node::{
 use datafusion_common::{DataFusionError, JoinSide, JoinType, Result, internal_err};
 use datafusion_execution::TaskContext;
 use datafusion_expr::ExpressionPlacement;
-use datafusion_physical_expr::equivalence::ProjectionMapping;
+use datafusion_physical_expr::Partitioning;
+use datafusion_physical_expr::equivalence::{EquivalenceProperties, ProjectionMapping};
 use datafusion_physical_expr::projection::Projector;
 use datafusion_physical_expr_common::physical_expr::{PhysicalExprRef, fmt_sql};
 use datafusion_physical_expr_common::sort_expr::{
@@ -149,14 +150,18 @@ impl ProjectionExec {
         projector: Projector,
         input: Arc<dyn ExecutionPlan>,
     ) -> Result<Self> {
-        // Construct a map from the input expressions to the output expression of the Projection
-        let projection_mapping =
-            projector.projection().projection_mapping(&input.schema())?;
-        let cache = Self::compute_properties(
-            &input,
-            &projection_mapping,
-            Arc::clone(projector.output_schema()),
-        )?;
+        let cache = match Self::ordered_column_properties(&projector, &input) {
+            Some(properties) => properties,
+            None => {
+                let projection_mapping =
+                    projector.projection().projection_mapping(&input.schema())?;
+                Self::compute_properties(
+                    &input,
+                    &projection_mapping,
+                    Arc::clone(projector.output_schema()),
+                )?
+            }
+        };
         Ok(Self {
             projector,
             input,
@@ -164,6 +169,54 @@ impl ProjectionExec {
             cache: Arc::new(cache),
             row_error_prefix: false,
         })
+    }
+
+    fn ordered_column_properties(
+        projector: &Projector,
+        input: &Arc<dyn ExecutionPlan>,
+    ) -> Option<PlanProperties> {
+        let output_schema = projector.output_schema();
+        let width = output_schema.fields().len();
+        if width < 64 {
+            return None;
+        }
+
+        let input_schema = input.schema();
+        let equivalences = input.equivalence_properties();
+        let partitioning = input.output_partitioning();
+        if input_schema.fields().len() != width
+            || !equivalences.eq_group().is_empty()
+            || !equivalences.oeq_class().is_empty()
+            || !equivalences.constraints().is_empty()
+            || matches!(partitioning, Partitioning::Hash(_, _))
+        {
+            return None;
+        }
+
+        let mut visited = 0;
+        for (index, (expr, field)) in projector
+            .projection()
+            .iter()
+            .zip(input_schema.fields())
+            .enumerate()
+        {
+            let column = expr.expr.downcast_ref::<Column>()?;
+            if column.index() != index || column.name() != field.name() {
+                return None;
+            }
+            visited += 1;
+        }
+        if visited != width {
+            return None;
+        }
+
+        // A one-to-one column rename cannot create equivalences or constants.
+        Some(PlanProperties::new(
+            EquivalenceProperties::new(Arc::clone(output_schema)),
+            partitioning.clone(),
+            input.pipeline_behavior(),
+            input.boundedness(),
+        ))
     }
 
     /// Retain a computed batch's successful prefix and defer its owned failure.
