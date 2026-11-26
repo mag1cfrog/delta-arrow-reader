@@ -2750,6 +2750,14 @@ snapshot of the session with its query execution start time cleared, including
 for sets inside subqueries. The [planning report](benches/reports/planning-1390-round2-logical.md)
 records the cost of the previous eager snapshot.
 
+### Ordinary function argument expansion (#1390)
+
+The ordinary function resolver passes a single resolved argument to
+name and qualifier collection without allocating a temporary vector.
+Wildcard and multi-expression arguments still use the existing
+expansion. The [CASE resolver attribution](benches/reports/planning-1390-macos-resolver-arguments-attribution.md)
+records the affected argument path.
+
 ### AES scalar and column arguments (#1405)
 
 The local Sail AES functions evaluate inputs, keys, modes, padding, IVs and

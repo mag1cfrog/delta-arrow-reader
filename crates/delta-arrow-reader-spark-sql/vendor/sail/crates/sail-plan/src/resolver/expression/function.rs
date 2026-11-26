@@ -7,6 +7,7 @@ use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::registry::FunctionRegistry;
 use datafusion_expr::{EmptyRelation, Expr, ExprSchemable, LogicalPlan, expr};
 use datafusion_functions_nested::concat::ArrayConcat;
+use either::Either;
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::multi_expr::MultiExpr;
@@ -411,7 +412,21 @@ impl PlanResolver<'_> {
             let named = self
                 .resolve_named_expression(expression, schema, state)
                 .await?;
-            for argument in self.expand_function_argument(named, schema, state)? {
+            let expanded = match &named.expr {
+                #[expect(deprecated)]
+                Expr::Wildcard { .. } => true,
+                Expr::ScalarFunction(function) => function.func.inner().is::<MultiExpr>(),
+                _ => false,
+            };
+            let resolved = if expanded {
+                Either::Left(
+                    self.expand_function_argument(named, schema, state)?
+                        .into_iter(),
+                )
+            } else {
+                Either::Right(std::iter::once(named))
+            };
+            for argument in resolved {
                 names.push(argument.expression_name()?);
                 operands.push(IntervalOperand::of(
                     &argument.expr,
