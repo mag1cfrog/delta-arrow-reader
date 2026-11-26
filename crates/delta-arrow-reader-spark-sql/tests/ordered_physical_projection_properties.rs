@@ -9,7 +9,7 @@ use datafusion::common::Result;
 use datafusion::datasource::memory::MemorySourceConfig;
 use datafusion::datasource::source::DataSourceExec;
 use datafusion::physical_expr::expressions::Column;
-use datafusion::physical_expr::{LexOrdering, PhysicalSortExpr};
+use datafusion::physical_expr::{LexOrdering, Partitioning, PhysicalSortExpr};
 use datafusion::physical_plan::projection::{ProjectionExec, ProjectionExpr, ProjectionExprs};
 use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanProperties, collect};
 use datafusion::prelude::SessionContext;
@@ -31,7 +31,16 @@ fn projection_with_expected_properties(
         Arc::new(ProjectionExec::try_new(expressions, Arc::clone(&input))?);
     let actual = projection.equivalence_properties();
     assert_eq!(projection.schema(), schema);
-    assert_eq!(projection.output_partitioning(), &partitions);
+    match (projection.output_partitioning(), &partitions) {
+        (
+            Partitioning::UnknownPartitioning(actual),
+            Partitioning::UnknownPartitioning(expected),
+        ) => {
+            // DataFusion does not treat unknown partitions as equivalent.
+            assert_eq!(actual, expected);
+        }
+        (actual, expected) => assert_eq!(actual, expected),
+    }
     assert_eq!(
         projection.output_ordering(),
         properties.output_ordering().as_ref()
