@@ -26,6 +26,7 @@ use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
 
 use self::input_sort_boundary::InputSortBoundaryExec;
 use self::monotonic_id::MonotonicIdExec;
+use self::ordered_scan_renames::{OrderedScanRenames, lower_ordered_scan_renames};
 use self::signed_range_window::{
     SparkSignedRangeWindowNode, lower_signed_range_windows, plan_signed_range_window,
 };
@@ -38,6 +39,7 @@ use crate::projection_row_errors::{ProjectionRowErrorNode, admit_prefix_producer
 
 mod input_sort_boundary;
 mod monotonic_id;
+mod ordered_scan_renames;
 mod seeded_rand;
 mod signed_range_window;
 mod spark_partition_id;
@@ -109,6 +111,7 @@ impl QueryPlanner for SparkQueryPlanner {
         } else {
             runtime_plan
         };
+        let runtime_plan = lower_ordered_scan_renames(runtime_plan, spark_semantics);
         let physical =
             DefaultPhysicalPlanner::with_extension_planners(vec![Arc::new(SparkExtensionPlanner)])
                 .create_physical_plan(&runtime_plan, &state)
@@ -372,6 +375,11 @@ impl ExtensionPlanner for SparkExtensionPlanner {
                 distribution,
                 sort.fetch(),
             ))
+        } else if let Some(renames) = node.as_any().downcast_ref::<OrderedScanRenames>() {
+            let [input] = physical_inputs else {
+                return internal_err!("Ordered scan renames require exactly one physical input");
+            };
+            renames.create_physical_projection(Arc::clone(input))?
         } else {
             return Ok(None);
         };

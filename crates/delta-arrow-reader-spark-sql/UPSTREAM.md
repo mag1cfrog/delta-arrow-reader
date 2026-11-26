@@ -2658,6 +2658,14 @@ metadata walk still handles filters, alias metadata, constraints and
 other plans. The [planner profile](benches/reports/planning-1390-round3-planner-split.md)
 measured the repeated schema work in this step.
 
+After logical optimization, the Spark query planner lowers wide ordered
+renames of a scan without filters directly to the same `ProjectionExec`.
+The rewrite checks that each qualified column resolves to its scan
+ordinal and that each alias matches the declared output field name.
+Other projections use ordinary DataFusion lowering. The [wide planner
+profile](benches/reports/planning-1390-round3-planner-split.md) measured
+the repeated name resolution in that path.
+
 ### SPLIT with one ASCII delimiter (#1413)
 
 A nonnull scalar pattern consisting of one literal ASCII graphic or space
