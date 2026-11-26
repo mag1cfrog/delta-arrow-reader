@@ -1,0 +1,589 @@
+{
+  "machine": "Apple Silicon, native macOS",
+  "builds": {
+    "staging": {
+      "source": "1d74a82d50d68c75c119a5f7f9411e9d81767c0f",
+      "sha256": "9d50a1ce13414397b01b3313b3af17e8d8e6feccddf04f049e7473135e8a0636"
+    },
+    "candidate": {
+      "source": "9b7a75400e6cd7bda7fb653871e5a938631e668c",
+      "sha256": "e170ec8387e5c4c0dd6bac07e6d4766317f53afd6ea2194177b94d9930a49de5"
+    }
+  },
+  "routines": {
+    "native_parse": {
+      "builds": {
+        "staging": {
+          "symbol": "__ZN10datafusion9execution13session_state12SessionState16sql_to_statement17hf1554e1db511b292E",
+          "count": 356,
+          "normalized_sha256": "c1fb31e8f1a7b3700d4082e621795644e160b0e6832860687724f9d3684d1d66",
+          "entry": [
+            "stp x26, x25, [sp, #-0x50]!",
+            "stp x24, x23, [sp, #0x10]",
+            "stp x22, x21, [sp, #0x20]",
+            "stp x20, x19, [sp, #0x30]",
+            "stp x29, x30, [sp, #0x40]",
+            "add x29, sp, #0x40",
+            "sub sp, sp, #0x1e0",
+            "mov x22, x2",
+            "mov x23, x1",
+            "mov x24, x0",
+            "mov x21, x8",
+            "add x25, sp, #0x78"
+          ]
+        },
+        "candidate": {
+          "symbol": "__ZN10datafusion9execution13session_state12SessionState16sql_to_statement17hf1554e1db511b292E",
+          "count": 356,
+          "normalized_sha256": "ccaa557fab646995c6228825d1bf39dbabbc2205a0aaf279feec9fb3cac0f8ba",
+          "entry": [
+            "stp x26, x25, [sp, #-0x50]!",
+            "stp x24, x23, [sp, #0x10]",
+            "stp x22, x21, [sp, #0x20]",
+            "stp x20, x19, [sp, #0x30]",
+            "stp x29, x30, [sp, #0x40]",
+            "add x29, sp, #0x40",
+            "sub sp, sp, #0x1e0",
+            "mov x22, x2",
+            "mov x23, x1",
+            "mov x24, x0",
+            "mov x21, x8",
+            "add x25, sp, #0x78"
+          ]
+        }
+      },
+      "normalized_match": false
+    },
+    "native_plan": {
+      "builds": {
+        "staging": {
+          "symbol": "__ZN14datafusion_sql9statement60_$LT$impl$u20$datafusion_sql..planner..SqlToRel$LT$S$GT$$GT$17statement_to_plan17he918c98f8f6c89ddE",
+          "count": 2533,
+          "normalized_sha256": "dd769ddc4b82cbb6f6d7fa3c0336b446b818c71dcb086bcef8f4115a65c421c3",
+          "entry": [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x1, lsl #12 ; =0x1000",
+            "str xzr, [sp]",
+            "sub sp, sp, #0x660",
+            "str xzr, [sp]",
+            "mov x19, x1"
+          ]
+        },
+        "candidate": {
+          "symbol": "__ZN14datafusion_sql9statement60_$LT$impl$u20$datafusion_sql..planner..SqlToRel$LT$S$GT$$GT$17statement_to_plan17he918c98f8f6c89ddE",
+          "count": 2533,
+          "normalized_sha256": "6d8f2408ef4e1d36caa308d14b69a797ff6826aa024e9f6e7fc1c680be59f6c5",
+          "entry": [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x1, lsl #12 ; =0x1000",
+            "str xzr, [sp]",
+            "sub sp, sp, #0x660",
+            "str xzr, [sp]",
+            "mov x19, x1"
+          ]
+        }
+      },
+      "normalized_match": false
+    },
+    "native_table_references": {
+      "builds": {
+        "staging": {
+          "symbol": "__ZN10datafusion9execution13session_state12SessionState24resolve_table_references17h3f7ed7c63524b494E",
+          "count": 75,
+          "normalized_sha256": "0b888183abd276944b925c3c6119f7cdda68318b55578c923f7c977255dc28cd",
+          "entry": [
+            "sub sp, sp, #0x80",
+            "stp x24, x23, [sp, #0x40]",
+            "stp x22, x21, [sp, #0x50]",
+            "stp x20, x19, [sp, #0x60]",
+            "stp x29, x30, [sp, #0x70]",
+            "add x29, sp, #0x70",
+            "mov x9, x1",
+            "mov x20, x8",
+            "ldr x8, [x0, #0x610]",
+            "ldrb w1, [x8, #0x299]",
+            "add x8, sp, #0x10",
+            "mov x0, x9"
+          ]
+        },
+        "candidate": {
+          "symbol": "__ZN10datafusion9execution13session_state12SessionState24resolve_table_references17h3f7ed7c63524b494E",
+          "count": 75,
+          "normalized_sha256": "1094ab16425e18e5cf2b6979ddd41f4ea85c8e63f6351e054f53bbfe04c0c3f5",
+          "entry": [
+            "sub sp, sp, #0x80",
+            "stp x24, x23, [sp, #0x40]",
+            "stp x22, x21, [sp, #0x50]",
+            "stp x20, x19, [sp, #0x60]",
+            "stp x29, x30, [sp, #0x70]",
+            "add x29, sp, #0x70",
+            "mov x9, x1",
+            "mov x20, x8",
+            "ldr x8, [x0, #0x610]",
+            "ldrb w1, [x8, #0x299]",
+            "add x8, sp, #0x10",
+            "mov x0, x9"
+          ]
+        }
+      },
+      "normalized_match": false
+    },
+    "logical_projection_schema": {
+      "builds": {
+        "staging": {
+          "symbol": "__ZN15datafusion_expr12logical_plan4plan17projection_schema17haeb7465c1298a0c8E",
+          "count": 262,
+          "normalized_sha256": "cfed476b89e3e1870043935d13e36199fe95bcbc1f5bf1089765dcb2c6dfc17a",
+          "entry": [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x220",
+            "mov x20, x2",
+            "mov x22, x1",
+            "mov x21, x0",
+            "mov x19, x8"
+          ]
+        },
+        "candidate": {
+          "symbol": "__ZN15datafusion_expr12logical_plan4plan17projection_schema17haeb7465c1298a0c8E",
+          "count": 262,
+          "normalized_sha256": "b1ce79a8283fc6cb4ab441f393422069f732e7f15fb48adabb4996cd886b5cb8",
+          "entry": [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x220",
+            "mov x20, x2",
+            "mov x22, x1",
+            "mov x21, x0",
+            "mov x19, x8"
+          ]
+        }
+      },
+      "normalized_match": false
+    },
+    "spark_logical": {
+      "builds": {
+        "staging": {
+          "symbol": "__ZN28delta_arrow_reader_spark_sql10plan_query28_$u7b$$u7b$closure$u7d$$u7d$17h2b28fc62af1e2b73E",
+          "count": 2438,
+          "normalized_sha256": "0fd071866aa43dda19617d11cf1be7983244d62404778d8a96d22d655da00cd5",
+          "entry": [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x1, lsl #12 ; =0x1000",
+            "str xzr, [sp]",
+            "sub sp, sp, #0x680",
+            "str xzr, [sp]",
+            "mov x19, x1"
+          ]
+        },
+        "candidate": {
+          "symbol": "__ZN28delta_arrow_reader_spark_sql10plan_query28_$u7b$$u7b$closure$u7d$$u7d$17h2b28fc62af1e2b73E",
+          "count": 2438,
+          "normalized_sha256": "8c0568e1c7659d1cf74ac21a9aa79b67711067c6a2854c009edbb8eacbcf8cae",
+          "entry": [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x1, lsl #12 ; =0x1000",
+            "str xzr, [sp]",
+            "sub sp, sp, #0x680",
+            "str xzr, [sp]",
+            "mov x19, x1"
+          ]
+        }
+      },
+      "normalized_match": false
+    },
+    "physical_projection_properties": {
+      "builds": {
+        "staging": {
+          "symbol": "__ZN24datafusion_physical_plan10projection14ProjectionExec18try_from_projector17h1a8b5328a2198d45E",
+          "count": 409,
+          "normalized_sha256": "9da28712646b08b9269156749490b3a167dd40c96796b23551edfe74f29276a2",
+          "entry": [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x600",
+            "str xzr, [sp]",
+            "mov x22, x2",
+            "mov x27, x1",
+            "mov x19, x0"
+          ]
+        },
+        "candidate": {
+          "symbol": "__ZN24datafusion_physical_plan10projection14ProjectionExec18try_from_projector17h1a8b5328a2198d45E",
+          "count": 584,
+          "normalized_sha256": "6476230f98466ede4d0fd2a947caa02b8e6a46dcd3f855f77a83a8c41918167a",
+          "entry": [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x7a0",
+            "str xzr, [sp]",
+            "mov x22, x2",
+            "mov x19, x1",
+            "mov x20, x0"
+          ]
+        }
+      },
+      "normalized_match": false
+    }
+  },
+  "state_source_sha256": {
+    "datafusion-physical-plan/src/execution_plan.rs": "79db7478ca23047b0890082576d83df2283dc78e361e69048e9b352b79cb228b",
+    "datafusion-physical-expr/src/equivalence/properties/mod.rs": "4c12a51fb6d0ad4b1c4dd712ab7cb44b69a07313c200af640196d99ffd64edad",
+    "datafusion-physical-expr/src/partitioning.rs": "9db06c4227959e1cd08ccf534697a51f64e68d82e552db5ed6b82881ac1a3eb1",
+    "ProjectionExec": "423cd17a6e87f054543f9a043bbf90f6e04477b688e3dc828bad505784513426"
+  },
+  "flags": [
+    {
+      "case": "paired/ordered_limit",
+      "configuration": "native-configured",
+      "metric": "logical_ns",
+      "status": "ok",
+      "before": 41625,
+      "after": 69333,
+      "delta": 25208,
+      "floor": 20958.5,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 0
+      },
+      "code_evidence": "The available disassembly covers selected routines. The complete executed path remains unresolved.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "paired/ordered_limit",
+      "configuration": "native-configured",
+      "metric": "physical_ns",
+      "status": "ok",
+      "before": 108667,
+      "after": 184125,
+      "delta": 76083,
+      "floor": 55375.0,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 0
+      },
+      "code_evidence": "The available disassembly covers selected routines. The complete executed path remains unresolved.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "paired/ordered_limit",
+      "configuration": "native-configured",
+      "metric": "total_ns",
+      "status": "ok",
+      "before": 151208,
+      "after": 251917,
+      "delta": 99500,
+      "floor": 77354.0,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 0
+      },
+      "code_evidence": "The available disassembly covers selected routines. The complete executed path remains unresolved.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "paired/distinct",
+      "configuration": "native-plain",
+      "metric": "logical_ns",
+      "status": "ok",
+      "before": 30750,
+      "after": 58083,
+      "delta": 23042,
+      "floor": 17103.5,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 0
+      },
+      "code_evidence": "The available disassembly covers selected routines. The complete executed path remains unresolved.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "paired/distinct",
+      "configuration": "native-plain",
+      "metric": "physical_ns",
+      "status": "ok",
+      "before": 68792,
+      "after": 132958,
+      "delta": 51875,
+      "floor": 35167.0,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 0
+      },
+      "code_evidence": "The available disassembly covers selected routines. The complete executed path remains unresolved.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "paired/distinct",
+      "configuration": "native-plain",
+      "metric": "total_ns",
+      "status": "ok",
+      "before": 99542,
+      "after": 191124,
+      "delta": 73541,
+      "floor": 53249.5,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 0
+      },
+      "code_evidence": "The available disassembly covers selected routines. The complete executed path remains unresolved.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "paired/having",
+      "configuration": "spark-off",
+      "metric": "physical_ns",
+      "status": "ok",
+      "before": 652750,
+      "after": 714292,
+      "delta": 64458,
+      "floor": 62479.5,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 162
+      },
+      "code_evidence": "The canonical route has initial projection construction. Its property routine differs.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "paired/having",
+      "configuration": "spark-off",
+      "metric": "total_ns",
+      "status": "ok",
+      "before": 822167,
+      "after": 905833,
+      "delta": 88374,
+      "floor": 81500.5,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 162
+      },
+      "code_evidence": "The canonical route has initial projection construction. Its property routine differs.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "paired/union_all",
+      "configuration": "native-configured",
+      "metric": "logical_ns",
+      "status": "ok",
+      "before": 42958,
+      "after": 78209,
+      "delta": 25375,
+      "floor": 21833.5,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 162
+      },
+      "code_evidence": "The available disassembly covers selected routines. The complete executed path remains unresolved.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "paired/union_all",
+      "configuration": "native-configured",
+      "metric": "physical_ns",
+      "status": "ok",
+      "before": 91791,
+      "after": 154625,
+      "delta": 52375,
+      "floor": 44437.5,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 162
+      },
+      "code_evidence": "The canonical route has initial projection construction. Its property routine differs.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "paired/union_all",
+      "configuration": "native-configured",
+      "metric": "total_ns",
+      "status": "ok",
+      "before": 132916,
+      "after": 232834,
+      "delta": 79583,
+      "floor": 64750.0,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 162
+      },
+      "code_evidence": "The canonical route has initial projection construction. Its property routine differs.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "stress/wide_400",
+      "configuration": "native-configured",
+      "metric": "logical_ns",
+      "status": "ok",
+      "before": 2166500,
+      "after": 2282000,
+      "delta": 102875,
+      "floor": 64125.0,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 0
+      },
+      "code_evidence": "The available disassembly covers selected routines. The complete executed path remains unresolved.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "stress/wide_400",
+      "configuration": "native-configured",
+      "metric": "total_ns",
+      "status": "ok",
+      "before": 5624917,
+      "after": 5877543,
+      "delta": 268124,
+      "floor": 202604.5,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 0
+      },
+      "code_evidence": "The available disassembly covers selected routines. The complete executed path remains unresolved.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "stress/wide_400",
+      "configuration": "spark-off",
+      "metric": "logical_ns",
+      "status": "ok",
+      "before": 2115417,
+      "after": 2200333,
+      "delta": 86333,
+      "floor": 23396.0,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 162
+      },
+      "code_evidence": "The available disassembly covers selected routines. The complete executed path remains unresolved.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "stress/wide_400",
+      "configuration": "spark-on",
+      "metric": "logical_ns",
+      "status": "ok",
+      "before": 2117833,
+      "after": 2200417,
+      "delta": 87917,
+      "floor": 74771.0,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 162
+      },
+      "code_evidence": "The available disassembly covers selected routines. The complete executed path remains unresolved.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "stress/wide_400",
+      "configuration": "native-plain",
+      "metric": "logical_ns",
+      "status": "ok",
+      "before": 2185250,
+      "after": 2337458,
+      "delta": 148208,
+      "floor": 52292.0,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 0
+      },
+      "code_evidence": "The available disassembly covers selected routines. The complete executed path remains unresolved.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "stress/wide_400",
+      "configuration": "native-plain",
+      "metric": "physical_ns",
+      "status": "ok",
+      "before": 3319667,
+      "after": 3468833,
+      "delta": 143959,
+      "floor": 85041.5,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 0
+      },
+      "code_evidence": "The available disassembly covers selected routines. The complete executed path remains unresolved.",
+      "decision_after_layout": "no layout waiver assigned"
+    },
+    {
+      "case": "stress/wide_400",
+      "configuration": "native-plain",
+      "metric": "total_ns",
+      "status": "ok",
+      "before": 5508917,
+      "after": 5805666,
+      "delta": 289790,
+      "floor": 113541.5,
+      "decision": "slower",
+      "prior_observer": {
+        "retained_plans": 162,
+        "initial_projection": 0
+      },
+      "code_evidence": "The available disassembly covers selected routines. The complete executed path remains unresolved.",
+      "decision_after_layout": "no layout waiver assigned"
+    }
+  ],
+  "method": "Remove instruction addresses. Resolve symbolized direct destinations by name and in-body destinations by relative offset. Keep all other operands, including any unresolved page-relative operands and stack or field offsets.",
+  "coverage": "Projection construction is confirmed by the trace and the earlier observation spans where present. The source and symbol review does not identify the full exact-release execution path for the remaining flags."
+}
