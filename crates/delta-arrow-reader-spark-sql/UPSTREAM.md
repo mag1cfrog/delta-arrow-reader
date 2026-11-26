@@ -187,6 +187,13 @@ The [projection tests](tests/projection_column_lookup.rs) compare the public rul
 with the original lookup and check native values, NULLs and executed types with
 and without Spark configuration.
 
+After a projection merge, DataFusion's projection optimizer uses all scan
+ordinals directly for wide, ordered renames of unique qualified columns.
+Other expressions still use ordered schema lookup. The rewrite still
+constructs the scan and projection through the original code. The
+[wide attribution](benches/reports/planning-1390-round3-wide-attribution.md)
+identified the repeated lookups in this rule.
+
 DataFusion's `projection_schema` skips remapping column positions when
 the input schema has no functional dependencies and the projection has
 no wildcard. Field resolution and validation still run. Projections over
