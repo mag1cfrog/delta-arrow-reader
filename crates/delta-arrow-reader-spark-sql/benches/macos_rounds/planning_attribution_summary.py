@@ -110,6 +110,17 @@ def contrast(spark, native, phase):
     return output
 
 
+def ordinary_logical(cells, mode, statements):
+    members = [case for case in statements if case.startswith("paired/")]
+    assert len(members) == 25
+    result = {}
+    for arm in ARMS:
+        for block in range(1, 10):
+            rows = [cells[case, mode][arm, block]["logical"] for case in members]
+            result[arm, block] = {"logical": {part: median(r[part] for r in rows) for part in rows[0]}}
+    return result
+
+
 def main():
     cli = argparse.ArgumentParser(description=__doc__)
     for arg in ("protocol", "samples", "output"):
@@ -120,6 +131,11 @@ def main():
     results = [{"statement": case, "configuration": mode, "phase": phase,
                 "observations": contrast(cells[case, mode], cells[case, NATIVE], phase)}
                for case in spec["statements"] for mode in SPARK for phase in METRICS]
+    native = ordinary_logical(cells, NATIVE, spec["statements"])
+    for mode in SPARK:
+        spark = ordinary_logical(cells, mode, spec["statements"])
+        results.append({"statement": "paired/logical_median", "configuration": mode, "phase": "logical",
+                        "observations": contrast(spark, native, "logical")})
     with args.output.open("x") as stream:
         stream.write(json.dumps(results, indent=2) + "\n")
 
