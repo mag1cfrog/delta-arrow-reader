@@ -53,6 +53,7 @@ use crate::{
 
 use arrow::datatypes::{DataType, Field, FieldRef, Schema, SchemaRef};
 use datafusion_common::cse::{NormalizeEq, Normalizeable};
+use datafusion_common::datatype::FieldExt;
 use datafusion_common::format::ExplainFormat;
 use datafusion_common::metadata::check_metadata_with_storage_equal;
 use datafusion_common::tree_node::{
@@ -2472,14 +2473,61 @@ pub fn projection_schema(input: &LogicalPlan, exprs: &[Expr]) -> Result<Arc<DFSc
     // Preserve input schema metadata at the schema level
     let metadata = input.schema().metadata().clone();
 
-    // Convert expressions to fields with Field properties determined by `Expr::to_field`
-    let schema =
-        DFSchema::new_with_metadata(exprlist_to_fields(exprs, input)?, metadata)?
-            .with_functional_dependencies(calc_func_dependencies_for_project(
-                exprs, input,
-            )?)?;
+    let fields = match ordered_scan_rename_fields(input, exprs) {
+        Some(fields) => fields,
+        None => exprlist_to_fields(exprs, input)?,
+    };
+    let schema = DFSchema::new_with_metadata(fields, metadata)?
+        .with_functional_dependencies(calc_func_dependencies_for_project(exprs, input)?)?;
 
     Ok(Arc::new(schema))
+}
+
+fn ordered_scan_rename_fields(
+    input: &LogicalPlan,
+    exprs: &[Expr],
+) -> Option<Vec<(Option<TableReference>, FieldRef)>> {
+    let width = exprs.len();
+    if width < 64 || !matches!(exprs.first(), Some(Expr::Alias(_))) {
+        return None;
+    }
+    let LogicalPlan::TableScan(scan) = input else {
+        return None;
+    };
+    let schema = &scan.projected_schema;
+    if width != schema.fields().len()
+        || !scan.filters.is_empty()
+        || !schema.functional_dependencies().is_empty()
+    {
+        return None;
+    }
+
+    let mut names = HashSet::with_capacity(width);
+    let mut fields = Vec::with_capacity(width);
+    for ((qualifier, field), expr) in schema.iter().zip(exprs) {
+        let Expr::Alias(alias) = expr else {
+            return None;
+        };
+        let Expr::Column(column) = alias.expr.as_ref() else {
+            return None;
+        };
+        if alias.metadata.is_some()
+            || qualifier != Some(&scan.table_name)
+            || column.relation.as_ref() != qualifier
+            || &column.name != field.name()
+            || !names.insert(field.name())
+        {
+            return None;
+        }
+
+        // The existing lookup would select this same qualified field for both
+        // its value type and its metadata.
+        fields.push((
+            alias.relation.clone(),
+            Arc::clone(field).renamed(&alias.name),
+        ));
+    }
+    (fields.len() == width).then_some(fields)
 }
 
 /// Aliased subquery

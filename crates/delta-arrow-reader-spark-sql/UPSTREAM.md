@@ -202,6 +202,15 @@ This local change addresses the dependency lookup attributed in the
 [wide planning report](benches/reports/planning-1390-round2-wide-metadata.md).
 The [schema tests](tests/projection_columns/dependencies.rs) check both routes.
 
+For a full-width, ordered scan rename with unique qualified input names,
+DataFusion's `projection_schema` constructs fields from their verified scan
+positions. Aliases with their own metadata, filters, functional dependencies,
+and other projection shapes keep the general field resolver. Schema validation
+and functional dependency handling still use the original constructor. The
+[macOS attribution](benches/reports/planning-1390-macos-attribution.md) traced
+most of the wide projection rewrite to repeated field and metadata resolution.
+[Schema differential](tests/ordered_scan_projection_schema.rs).
+
 Two original overrides, `datafusion-expr-common` and `arrow-select`, were identical
 to their pinned registry packages. They use those packages directly; the inventory
 retains their accepted file hashes and registry mappings.
