@@ -1,0 +1,55 @@
+{
+  "native-configured": {
+    "median_logical_cost_ns": {
+      "staging": 71208,
+      "candidate": 74875,
+      "paired_delta": 2916,
+      "aa_floor": 15292.0,
+      "status": "within floor"
+    },
+    "ordinary_logical_statement_decisions": {
+      "within floor": 25
+    }
+  },
+  "spark-off": {
+    "median_logical_cost_ns": {
+      "staging": 130875,
+      "candidate": 97958,
+      "paired_delta": -26958,
+      "aa_floor": 22604.5,
+      "status": "faster"
+    },
+    "paired_over_native_configured_ns": {
+      "staging": 46916,
+      "candidate": 17333,
+      "paired_delta": -27667,
+      "aa_floor": 19625.0,
+      "status": "faster"
+    },
+    "ordinary_logical_statement_decisions": {
+      "within floor": 22,
+      "slower": 1,
+      "faster": 2
+    }
+  },
+  "spark-on": {
+    "median_logical_cost_ns": {
+      "staging": 124667,
+      "candidate": 101084,
+      "paired_delta": -19791,
+      "aa_floor": 29521.0,
+      "status": "within floor"
+    },
+    "paired_over_native_configured_ns": {
+      "staging": 38876,
+      "candidate": 19666,
+      "paired_delta": -18958,
+      "aa_floor": 17374.5,
+      "status": "faster"
+    },
+    "ordinary_logical_statement_decisions": {
+      "within floor": 23,
+      "faster": 2
+    }
+  }
+}
