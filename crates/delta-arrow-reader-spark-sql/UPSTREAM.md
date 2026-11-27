@@ -2568,6 +2568,14 @@ again. The batch path keeps both lexer instances lazy. Decoded quoted intervals
 use the same rule in the scoped parser. Tests compare the original Rich results
 and error chain and verify the diagnostic lexer stays idle on valid inputs.
 
+### STRING interval token input (#1389, third round)
+
+The batch path tries the numeric grammar directly on this row's token slice,
+as the scoped parser already does. This saves creating a second token buffer
+and cloning the vector. The numeric parser is constructed for the row's slice
+lifetime. The full expression parser is still reused and keeps its original
+owned stream for inputs that the numeric grammar declines.
+
 ### Unpadded STRING DATE casts (#1389, second round)
 
 Unformatted Spark DATE casts accept a complete four-digit ASCII year with a

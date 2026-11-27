@@ -259,8 +259,7 @@ pub fn interval_parser<'a>() -> impl FnMut(&'a str) -> SqlResult<IntervalValue> 
     let options = &*OPTIONS;
     let mut lexer_without_diagnostics = None;
     let mut diagnostic_lexer = None;
-    let mut numeric_parser = None;
-    let mut parser = None;
+    let mut expression_parser = None;
     move |s| {
         let tokens = match lexer_without_diagnostics
             .get_or_insert_with(|| create_lexer::<_, Err<EmptyErr>>(options))
@@ -278,28 +277,25 @@ pub fn interval_parser<'a>() -> impl FnMut(&'a str) -> SqlResult<IntervalValue> 
                     .map_err(SqlError::parser)?
             }
         };
-        // Owning the token vector avoids tying these parsers to a row-local slice.
-        let input = |tokens| {
-            Stream::from_iter(tokens).map((s.len()..s.len()).into(), |(token, span)| (token, span))
-        };
-        if let Ok(interval) = numeric_parser
-            .get_or_insert_with(|| {
-                create_numeric_interval_literal_parser::<_, Err<EmptyErr>>(options)
-            })
-            .parse(input(tokens.clone()))
+        let end = (s.len()..s.len()).into();
+        let input = tokens.as_slice().map(end, map_parser_input);
+        if let Ok(interval) = create_numeric_interval_literal_parser::<_, Err<EmptyErr>>(options)
+            .parse(input)
             .into_result()
         {
             return from_ast_unqualified_interval(interval);
         }
+        // The reused full parser needs owned input so it can outlive this row.
+        let input = Stream::from_iter(tokens).map(end, |(token, span)| (token, span));
         let interval =
-            parser
+            expression_parser
                 .get_or_insert_with(|| {
                     create_interval_literal_parser::<
                         _,
                         chumsky::extra::Err<chumsky::error::Rich<_, _>>,
                     >(options)
                 })
-                .parse(input(tokens))
+                .parse(input)
                 .into_result()
                 .map_err(SqlError::parser)?;
         from_ast_unqualified_interval(interval)
