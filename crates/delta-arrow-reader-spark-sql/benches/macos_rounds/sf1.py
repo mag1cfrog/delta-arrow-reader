@@ -1,6 +1,8 @@
 """Compare SF1 SQL releases using the frozen macOS cell schedule."""
 
 import argparse
+import hashlib
+import json
 from pathlib import Path
 import sys
 import time
@@ -105,6 +107,14 @@ def collect(args, builds, specs, snapshot):
                     except AssertionError as error:
                         excluded.setdefault(("parsers", "interval_day_time"), []).append(f"{role}/{mode}: {error}")
 
+    for rows in observed.values():
+        for row in rows.values():
+            row.pop("operator_metrics", None)
+            row.pop("pool_peak_bytes", None)
+            source_io = row["source_io"]
+            ranges = source_io.pop("ranges")
+            source_io["range_count"] = len(ranges)
+            source_io["ranges_sha256"] = hashlib.sha256(json.dumps(ranges, sort_keys=True).encode()).hexdigest()
     cells.write(args.output / "proof.json", safe_record({
         "builds": builds, "protocol_sha256": digest(args.protocol),
         "fixture_proof_sha256": digest(FIXTURE), "observed": observed, "row_comparisons": comparisons,
