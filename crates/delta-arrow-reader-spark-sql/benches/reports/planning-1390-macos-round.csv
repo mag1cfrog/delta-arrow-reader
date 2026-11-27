@@ -1,0 +1,181 @@
+machine,statement,configuration,metric,baseline_status,opening_spark_ns,opening_native_configured_ns,opening_paired_gap_ns,opening_aa_floor_ns,opening_status,scan_ordinal_spark_ns,scan_ordinal_native_configured_ns,scan_ordinal_paired_gap_ns,scan_ordinal_aa_floor_ns,scan_ordinal_status,closing_spark_ns,closing_native_configured_ns,closing_paired_gap_ns,closing_aa_floor_ns,closing_status
+"Apple Silicon, native macOS",paired/array_projection,spark-off,logical_ns,slower,216250,120042,99709,75459.0,slower,206208,125542,78917,75459.0,slower,89250,35666,33375,39458.5,within floor
+"Apple Silicon, native macOS",paired/array_projection,spark-off,physical_ns,slower,517459,119583,401668,179479.5,slower,501125,122708,376916,179479.5,slower,241625,41333,173375,85479.5,slower
+"Apple Silicon, native macOS",paired/array_projection,spark-off,total_ns,slower,753209,238083,519002,259917.0,slower,707125,249751,457374,259917.0,slower,330959,76249,198375,125522.0,slower
+"Apple Silicon, native macOS",paired/array_projection,spark-on,logical_ns,slower,212709,120042,99126,76375.0,slower,213417,125542,104292,76375.0,slower,93708,35666,36958,37208.5,within floor
+"Apple Silicon, native macOS",paired/array_projection,spark-on,physical_ns,slower,495125,119583,380209,174209,slower,504333,122708,400416,174209,slower,244000,41333,207375,71146.0,slower
+"Apple Silicon, native macOS",paired/array_projection,spark-on,total_ns,slower,706333,238083,472126,262291,slower,721376,249751,487249,262291,slower,337708,76249,246124,108187.0,slower
+"Apple Silicon, native macOS",paired/correlated_scalar,spark-off,logical_ns,slower,673958,307625,341208,209396.5,slower,643125,360084,320542,209396.5,slower,176458,122458,49250,62667.0,within floor
+"Apple Silicon, native macOS",paired/correlated_scalar,spark-off,physical_ns,slower,3605417,1657250,1954834,1116875.0,slower,3449042,1805416,1900124,1116875.0,slower,1205334,718417,486584,304792.0,slower
+"Apple Silicon, native macOS",paired/correlated_scalar,spark-off,total_ns,slower,4202876,2029292,2198708,1221270.0,slower,4162666,2210376,2189374,1221270.0,slower,1384459,840750,542667,348979.5,slower
+"Apple Silicon, native macOS",paired/correlated_scalar,spark-on,logical_ns,slower,612084,307625,291084,197959.0,slower,582916,360084,256000,197959.0,slower,171375,122458,51375,39875.0,slower
+"Apple Silicon, native macOS",paired/correlated_scalar,spark-on,physical_ns,slower,3452625,1657250,1643500,1023604.5,slower,3328833,1805416,1642166,1023604.5,slower,1200541,718417,485001,248146.5,slower
+"Apple Silicon, native macOS",paired/correlated_scalar,spark-on,total_ns,slower,4061666,2029292,1903667,1149083.5,slower,3943875,2210376,1878833,1149083.5,slower,1374167,840750,533916,287292.0,slower
+"Apple Silicon, native macOS",paired/cte_chain,spark-off,logical_ns,within floor,876416,457833,307874,307499.0,slower,768250,473459,244167,307499.0,within floor,249834,179750,66709,52791.5,slower
+"Apple Silicon, native macOS",paired/cte_chain,spark-off,physical_ns,slower,2905417,1086167,1473500,894792.5,slower,2592458,1189292,1427750,894792.5,slower,1036709,453958,582751,205979.0,slower
+"Apple Silicon, native macOS",paired/cte_chain,spark-off,total_ns,slower,3802959,1535042,1879209,1192876.0,slower,3306667,1837667,1676584,1192876.0,slower,1289168,634333,652918,259353.5,slower
+"Apple Silicon, native macOS",paired/cte_chain,spark-on,logical_ns,slower,984125,457833,401126,270937.5,slower,740625,473459,270333,270937.5,within floor,208500,179750,46334,76396.0,within floor
+"Apple Silicon, native macOS",paired/cte_chain,spark-on,physical_ns,slower,3045625,1086167,1751459,856854.5,slower,2553709,1189292,1545166,856854.5,slower,847541,453958,397792,265354.5,slower
+"Apple Silicon, native macOS",paired/cte_chain,spark-on,total_ns,slower,3958875,1535042,2075208,1066896.0,slower,3352875,1837667,1772000,1066896.0,slower,1056041,634333,439041,336625.0,slower
+"Apple Silicon, native macOS",paired/delta_aggregate,spark-off,logical_ns,slower,526542,312209,244500,157104.0,slower,479375,299750,195750,157104.0,slower,147916,116541,40416,48729.5,within floor
+"Apple Silicon, native macOS",paired/delta_aggregate,spark-off,physical_ns,slower,1618750,963792,603208,342583,slower,1475959,868375,661250,342583,slower,541667,388958,171791,158854.5,slower
+"Apple Silicon, native macOS",paired/delta_aggregate,spark-off,total_ns,slower,2229584,1255125,930875,493520.5,slower,1938084,1161417,906125,493520.5,slower,705792,503166,212583,214499.5,within floor
+"Apple Silicon, native macOS",paired/delta_aggregate,spark-on,logical_ns,slower,455791,312209,180250,126646.0,slower,458917,299750,174792,126646.0,slower,131666,116541,24750,56125.5,within floor
+"Apple Silicon, native macOS",paired/delta_aggregate,spark-on,physical_ns,slower,1465667,963792,557334,428937.5,slower,1494125,868375,613876,428937.5,slower,474458,388958,125417,156937.5,within floor
+"Apple Silicon, native macOS",paired/delta_aggregate,spark-on,total_ns,slower,1969750,1255125,721833,449541.5,slower,2041458,1161417,781001,449541.5,slower,608499,503166,148042,213312.5,within floor
+"Apple Silicon, native macOS",paired/delta_filter,spark-off,logical_ns,slower,395709,173084,237542,143188.0,slower,352625,214875,141167,143188.0,within floor,122833,52875,46500,55270.5,within floor
+"Apple Silicon, native macOS",paired/delta_filter,spark-off,physical_ns,slower,1706666,677500,921166,901041.5,slower,1320125,810667,573041,901041.5,within floor,561417,226750,266208,221374.5,slower
+"Apple Silicon, native macOS",paired/delta_filter,spark-off,total_ns,slower,2161250,862667,1185751,1114584.0,slower,1665958,1032459,758041,1114584.0,within floor,685958,279625,312708,271854.0,slower
+"Apple Silicon, native macOS",paired/delta_filter,spark-on,logical_ns,slower,357250,173084,163208,162896.0,slower,378541,214875,206042,162896.0,slower,126791,52875,58083,52687.5,slower
+"Apple Silicon, native macOS",paired/delta_filter,spark-on,physical_ns,slower,1410708,677500,625208,1057750.0,within floor,1419208,810667,776083,1057750.0,within floor,574125,226750,294625,237563.0,slower
+"Apple Silicon, native macOS",paired/delta_filter,spark-on,total_ns,slower,1817501,862667,842002,1311021.0,within floor,1853917,1032459,1022500,1311021.0,within floor,701918,279625,367001,288584.0,slower
+"Apple Silicon, native macOS",paired/delta_projection,spark-off,logical_ns,slower,319708,165041,138791,122646.0,slower,282291,135958,123375,122646.0,slower,101292,68250,33584,39729.0,within floor
+"Apple Silicon, native macOS",paired/delta_projection,spark-off,physical_ns,slower,1091333,376333,649999,827938.5,within floor,971417,311500,646459,827938.5,within floor,416750,165750,209542,149083.0,slower
+"Apple Silicon, native macOS",paired/delta_projection,spark-off,total_ns,slower,1377124,554124,754873,1000916.0,within floor,1239958,439999,803667,1000916.0,within floor,518876,232542,244500,188603.5,slower
+"Apple Silicon, native macOS",paired/delta_projection,spark-on,logical_ns,slower,284750,165041,123251,129375.0,within floor,312958,135958,164542,129375.0,slower,81959,68250,33418,41541.0,within floor
+"Apple Silicon, native macOS",paired/delta_projection,spark-on,physical_ns,slower,992541,376333,645875,320417.0,slower,1145834,311500,776458,320417.0,slower,329417,165750,204875,154312.0,slower
+"Apple Silicon, native macOS",paired/delta_projection,spark-on,total_ns,slower,1288583,554124,669918,427937.5,slower,1500207,439999,1116417,427937.5,slower,402209,232542,233875,199603.0,slower
+"Apple Silicon, native macOS",paired/distinct,spark-off,logical_ns,slower,186792,145541,74792,114729.5,within floor,183667,133583,78917,114729.5,within floor,52042,29875,22542,34250.0,within floor
+"Apple Silicon, native macOS",paired/distinct,spark-off,physical_ns,slower,515833,334375,258667,220896.0,slower,529792,325166,278209,220896.0,slower,167583,73083,94500,104042.0,within floor
+"Apple Silicon, native macOS",paired/distinct,spark-off,total_ns,slower,706667,484707,341416,412854.5,within floor,714916,492125,357126,412854.5,within floor,217333,105500,111833,136458.5,within floor
+"Apple Silicon, native macOS",paired/distinct,spark-on,logical_ns,slower,235791,145541,75792,212979.0,within floor,208625,133583,83833,212979.0,within floor,76208,29875,19501,25271.0,within floor
+"Apple Silicon, native macOS",paired/distinct,spark-on,physical_ns,slower,589083,334375,320583,653916.5,within floor,565041,325166,273041,653916.5,within floor,245583,73083,110042,72667.0,slower
+"Apple Silicon, native macOS",paired/distinct,spark-on,total_ns,slower,827334,484707,393376,868125.0,within floor,773666,492125,338084,868125.0,within floor,323583,105500,130000,98417.0,slower
+"Apple Silicon, native macOS",paired/except,spark-off,logical_ns,slower,736084,238750,423417,216562.5,slower,717459,196458,513834,216562.5,slower,257417,77709,168083,57916.5,slower
+"Apple Silicon, native macOS",paired/except,spark-off,physical_ns,slower,1419000,840875,378375,901187.5,within floor,1372375,793583,499917,901187.5,within floor,548666,333917,174793,124542.0,slower
+"Apple Silicon, native macOS",paired/except,spark-off,total_ns,slower,2264708,1080458,799792,1239500.5,within floor,2010626,990041,1020585,1239500.5,within floor,807083,414666,343708,182105.0,slower
+"Apple Silicon, native macOS",paired/except,spark-on,logical_ns,slower,702041,238750,477332,204667.0,slower,808458,196458,572458,204667.0,slower,256458,77709,175083,95895.5,slower
+"Apple Silicon, native macOS",paired/except,spark-on,physical_ns,slower,1365458,840875,524958,733062.5,within floor,1606958,793583,605001,733062.5,within floor,547417,333917,180501,231437.0,within floor
+"Apple Silicon, native macOS",paired/except,spark-on,total_ns,slower,2056583,1080458,996082,998708.5,within floor,2386833,990041,1170208,998708.5,slower,808792,414666,351667,329082.5,slower
+"Apple Silicon, native macOS",paired/exists,spark-off,logical_ns,slower,444958,229417,205584,153062.5,slower,421833,227167,167791,153062.5,slower,97542,67958,32292,30583.0,slower
+"Apple Silicon, native macOS",paired/exists,spark-off,physical_ns,slower,1751792,758375,933333,744458.0,slower,1731625,694417,1006916,744458.0,slower,483917,224916,261709,157750.0,slower
+"Apple Silicon, native macOS",paired/exists,spark-off,total_ns,slower,2177001,996958,1148791,874311.5,slower,2204250,915126,1205708,874311.5,slower,585083,295041,296250,189458.0,slower
+"Apple Silicon, native macOS",paired/exists,spark-on,logical_ns,slower,376500,229417,137459,182666.5,within floor,477208,227167,231084,182666.5,slower,124625,67958,31375,42499.5,within floor
+"Apple Silicon, native macOS",paired/exists,spark-on,physical_ns,slower,1562209,758375,803834,611312.0,slower,2097583,694417,1180500,611312.0,slower,629125,224916,256375,192541.5,slower
+"Apple Silicon, native macOS",paired/exists,spark-on,total_ns,slower,1930958,996958,954125,803395.5,slower,2637333,915126,1420500,803395.5,slower,755000,295041,272833,229228.5,slower
+"Apple Silicon, native macOS",paired/filter,spark-off,logical_ns,slower,311708,141708,170667,160896.0,slower,346500,147500,166958,160896.0,slower,65333,45750,24083,39770.5,within floor
+"Apple Silicon, native macOS",paired/filter,spark-off,physical_ns,slower,814333,301000,513375,473667.0,slower,754458,317583,432708,473667.0,within floor,200875,105541,107209,103771.0,slower
+"Apple Silicon, native macOS",paired/filter,spark-off,total_ns,slower,1051708,444082,620290,590208.5,slower,1163124,462416,658666,590208.5,slower,266876,151792,128958,142916.5,within floor
+"Apple Silicon, native macOS",paired/filter,spark-on,logical_ns,slower,347791,141708,202625,144291.5,slower,276791,147500,106042,144291.5,within floor,78292,45750,28417,41333.5,within floor
+"Apple Silicon, native macOS",paired/filter,spark-on,physical_ns,slower,943792,301000,625959,330583.5,slower,746625,317583,388833,330583.5,slower,233542,105541,128001,116958.5,slower
+"Apple Silicon, native macOS",paired/filter,spark-on,total_ns,slower,1336667,444082,876000,614271.0,slower,1000167,462416,525542,614271.0,within floor,307417,151792,155625,160688.0,within floor
+"Apple Silicon, native macOS",paired/global_aggregates,spark-off,logical_ns,slower,612542,505500,107042,337646.0,within floor,789833,433958,358417,337646.0,slower,247042,172458,57917,103978.5,within floor
+"Apple Silicon, native macOS",paired/global_aggregates,spark-off,physical_ns,slower,1577208,1097875,413624,803124.5,within floor,1924875,951167,945834,803124.5,slower,614209,382542,230167,240583.5,within floor
+"Apple Silicon, native macOS",paired/global_aggregates,spark-off,total_ns,slower,2210916,1601875,571624,1190312.0,within floor,2777166,1344875,1361499,1190312.0,slower,862459,556709,305750,345501.0,within floor
+"Apple Silicon, native macOS",paired/global_aggregates,spark-on,logical_ns,slower,784792,505500,310500,261250.5,slower,825041,433958,409376,261250.5,slower,242750,172458,64416,68104.0,within floor
+"Apple Silicon, native macOS",paired/global_aggregates,spark-on,physical_ns,slower,1800500,1097875,871375,562353.5,slower,2057667,951167,997250,562353.5,slower,654833,382542,253375,158458.5,slower
+"Apple Silicon, native macOS",paired/global_aggregates,spark-on,total_ns,slower,2576292,1601875,1137292,841063.0,slower,2839750,1344875,1392585,841063.0,slower,901542,556709,298126,223459.5,slower
+"Apple Silicon, native macOS",paired/grouped_aggregates,spark-off,logical_ns,slower,656500,407458,258583,274542.5,within floor,795333,434625,330709,274542.5,slower,239375,159125,50999,98333.0,within floor
+"Apple Silicon, native macOS",paired/grouped_aggregates,spark-off,physical_ns,slower,1815791,887042,985083,813166.0,slower,1672833,915292,807417,813166.0,within floor,628083,330917,223833,240187.5,within floor
+"Apple Silicon, native macOS",paired/grouped_aggregates,spark-off,total_ns,slower,2544416,1281209,1324499,963896.0,slower,2465709,1351542,1050874,963896.0,slower,868084,491792,274582,335728.5,within floor
+"Apple Silicon, native macOS",paired/grouped_aggregates,spark-on,logical_ns,within floor,849292,407458,422542,218812.5,slower,873250,434625,318833,218812.5,slower,187166,159125,46500,75583.0,within floor
+"Apple Silicon, native macOS",paired/grouped_aggregates,spark-on,physical_ns,slower,2176167,887042,1066958,504520.5,slower,2144917,915292,982166,504520.5,slower,470417,330917,186333,182666.5,slower
+"Apple Silicon, native macOS",paired/grouped_aggregates,spark-on,total_ns,within floor,3031041,1281209,1382000,714083.5,slower,3066583,1351542,1385584,714083.5,slower,654917,491792,234584,254125.0,within floor
+"Apple Silicon, native macOS",paired/having,spark-off,logical_ns,slower,546250,342709,200917,221791.5,within floor,668375,300916,363292,221791.5,slower,130875,74083,53584,45958.5,slower
+"Apple Silicon, native macOS",paired/having,spark-off,physical_ns,slower,1742167,1019833,834292,828937.5,slower,2275542,895875,1111417,828937.5,slower,478709,223542,231499,159354.0,slower
+"Apple Silicon, native macOS",paired/having,spark-off,total_ns,slower,2317042,1371208,1123291,861229.0,slower,3030750,1155708,1531000,861229.0,slower,591250,295875,299417,197145.5,slower
+"Apple Silicon, native macOS",paired/having,spark-on,logical_ns,slower,722750,342709,353542,221333.0,slower,605000,300916,332126,221333.0,slower,171208,74083,62916,70584.0,within floor
+"Apple Silicon, native macOS",paired/having,spark-on,physical_ns,slower,2364542,1019833,1299876,530729.0,slower,2134958,895875,1275041,530729.0,slower,639750,223542,263708,246416.5,slower
+"Apple Silicon, native macOS",paired/having,spark-on,total_ns,slower,3044584,1371208,1710208,783479.0,slower,2792834,1155708,1599750,783479.0,slower,815749,295875,307167,318083.0,within floor
+"Apple Silicon, native macOS",paired/inner_join,spark-off,logical_ns,slower,375208,200292,193041,167625.0,slower,469333,194084,255667,167625.0,slower,89250,61833,27832,47000.0,within floor
+"Apple Silicon, native macOS",paired/inner_join,spark-off,physical_ns,slower,1600167,834417,768750,744147.0,slower,2019833,854667,1165166,744147.0,slower,481250,255167,250666,284958.5,within floor
+"Apple Silicon, native macOS",paired/inner_join,spark-off,total_ns,slower,1936667,1097999,948167,906230.5,slower,2599042,1081707,1370208,906230.5,slower,566541,310417,284541,337271.0,within floor
+"Apple Silicon, native macOS",paired/inner_join,spark-on,logical_ns,slower,453916,200292,222042,149791.5,slower,342958,194084,133500,149791.5,within floor,119291,61833,34333,48250.0,within floor
+"Apple Silicon, native macOS",paired/inner_join,spark-on,physical_ns,slower,2262500,834417,973292,555854.0,slower,1624584,854667,729292,555854.0,slower,659375,255167,261750,234854.5,slower
+"Apple Silicon, native macOS",paired/inner_join,spark-on,total_ns,slower,2728166,1097999,1289085,679354.0,slower,2003959,1081707,829792,679354.0,slower,776125,310417,290626,282479.5,slower
+"Apple Silicon, native macOS",paired/intersect,spark-off,logical_ns,slower,802875,199125,581209,179083.0,slower,890292,275042,658791,179083.0,slower,178875,56375,122500,75687.5,slower
+"Apple Silicon, native macOS",paired/intersect,spark-off,physical_ns,within floor,1490208,817459,592709,524604.5,slower,1621041,1109083,592625,524604.5,slower,339250,248750,125417,171708.0,within floor
+"Apple Silicon, native macOS",paired/intersect,spark-off,total_ns,within floor,2350708,1041000,1156667,716937.5,slower,2555250,1375250,1347791,716937.5,slower,515292,296625,253542,248104.0,slower
+"Apple Silicon, native macOS",paired/intersect,spark-on,logical_ns,slower,751709,199125,482708,270083.5,slower,826750,275042,534875,270083.5,slower,267833,56375,184208,77417.0,slower
+"Apple Silicon, native macOS",paired/intersect,spark-on,physical_ns,slower,1323375,817459,446041,706708.5,within floor,1477750,1109083,485125,706708.5,within floor,539417,248750,187084,174396.5,slower
+"Apple Silicon, native macOS",paired/intersect,spark-on,total_ns,slower,2078458,1041000,958666,954854.0,slower,2349209,1375250,973959,954854.0,slower,808458,296625,386000,252168.0,slower
+"Apple Silicon, native macOS",paired/left_join,spark-off,logical_ns,slower,377750,223333,182209,158604.5,slower,358792,204875,116709,158604.5,within floor,96084,86209,31624,30729.0,slower
+"Apple Silicon, native macOS",paired/left_join,spark-off,physical_ns,slower,1629166,1007083,818292,605542.0,slower,1585833,794750,785709,605542.0,slower,468416,352458,220249,149229.0,slower
+"Apple Silicon, native macOS",paired/left_join,spark-off,total_ns,slower,2010500,1284292,929584,732209.0,slower,1951542,999625,963875,732209.0,slower,562375,438208,254917,184667.0,slower
+"Apple Silicon, native macOS",paired/left_join,spark-on,logical_ns,slower,433125,223333,222000,104250.5,slower,401500,204875,186500,104250.5,slower,124667,86209,36458,37021.0,within floor
+"Apple Silicon, native macOS",paired/left_join,spark-on,physical_ns,slower,1660292,1007083,810083,469562.5,slower,1603792,794750,760875,469562.5,slower,624833,352458,259541,202937.5,slower
+"Apple Silicon, native macOS",paired/left_join,spark-on,total_ns,slower,2243708,1284292,1017835,577542.5,slower,1953333,999625,939500,577542.5,slower,741333,438208,292166,249334.0,slower
+"Apple Silicon, native macOS",paired/map_access,spark-off,logical_ns,slower,301792,203833,129791,170875.0,within floor,287584,190375,120292,170875.0,within floor,127500,49041,64416,57395.0,slower
+"Apple Silicon, native macOS",paired/map_access,spark-off,physical_ns,slower,791459,533458,303333,556916.5,within floor,758625,414958,432833,556916.5,within floor,359959,113375,179083,162416.5,slower
+"Apple Silicon, native macOS",paired/map_access,spark-off,total_ns,slower,1101750,739582,471707,796208.5,within floor,1039750,596500,532332,796208.5,within floor,486709,160251,243291,220207.5,slower
+"Apple Silicon, native macOS",paired/map_access,spark-on,logical_ns,slower,394834,203833,197208,144854.0,slower,390000,190375,208625,144854.0,slower,127917,49041,48834,57728.5,within floor
+"Apple Silicon, native macOS",paired/map_access,spark-on,physical_ns,slower,920834,533458,487959,489437.5,within floor,1008208,414958,464417,489437.5,within floor,360750,113375,147541,158395.5,within floor
+"Apple Silicon, native macOS",paired/map_access,spark-on,total_ns,slower,1330459,739582,692416,649375.5,slower,1407500,596500,674958,649375.5,slower,488166,160251,196375,212373.5,within floor
+"Apple Silicon, native macOS",paired/null_filter,spark-off,logical_ns,slower,229375,136000,93376,159312.5,within floor,234000,136459,106166,159312.5,within floor,61041,39833,20167,43937.5,within floor
+"Apple Silicon, native macOS",paired/null_filter,spark-off,physical_ns,slower,624458,268750,351000,298542.5,slower,649917,261125,385292,298542.5,slower,193542,77583,112124,114208.5,within floor
+"Apple Silicon, native macOS",paired/null_filter,spark-off,total_ns,slower,883333,402125,441791,589876.0,within floor,892083,404375,507875,589876.0,within floor,255958,118792,128207,157604.5,within floor
+"Apple Silicon, native macOS",paired/null_filter,spark-on,logical_ns,slower,271500,136000,152167,110916.0,slower,238375,136459,105625,110916.0,within floor,101458,39833,50208,45875.0,slower
+"Apple Silicon, native macOS",paired/null_filter,spark-on,physical_ns,slower,723000,268750,454250,228853.5,slower,652208,261125,421500,228853.5,slower,307500,77583,223792,117958.5,slower
+"Apple Silicon, native macOS",paired/null_filter,spark-on,total_ns,slower,1022125,402125,620000,328478.0,slower,884750,404375,526417,328478.0,slower,408958,118792,277457,163999.5,slower
+"Apple Silicon, native macOS",paired/ordered_limit,spark-off,logical_ns,slower,371250,140334,225334,151666.5,slower,338875,162208,151459,151666.5,within floor,108792,47792,30500,31791.5,within floor
+"Apple Silicon, native macOS",paired/ordered_limit,spark-off,physical_ns,slower,1111708,356042,700209,434834.0,slower,867458,408209,442459,434834.0,slower,367625,125250,157125,103125.0,slower
+"Apple Silicon, native macOS",paired/ordered_limit,spark-off,total_ns,slower,1499249,505209,907583,614999.5,slower,1220207,581876,642293,614999.5,slower,476417,171792,185376,133729.0,slower
+"Apple Silicon, native macOS",paired/ordered_limit,spark-on,logical_ns,slower,297500,140334,120458,168458.5,within floor,338417,162208,168917,168458.5,slower,71791,47792,27125,37645.5,within floor
+"Apple Silicon, native macOS",paired/ordered_limit,spark-on,physical_ns,slower,823708,356042,393834,361541.5,slower,1032750,408209,535084,361541.5,slower,234209,125250,113709,121521.0,within floor
+"Apple Silicon, native macOS",paired/ordered_limit,spark-on,total_ns,slower,1122583,505209,521000,488229.0,slower,1360417,581876,761502,488229.0,slower,304126,171792,140499,158292.0,within floor
+"Apple Silicon, native macOS",paired/projection,spark-off,logical_ns,slower,216042,124083,91709,89354.0,slower,185917,123459,56083,89354.0,within floor,57125,33666,18750,30750.0,within floor
+"Apple Silicon, native macOS",paired/projection,spark-off,physical_ns,slower,385792,124708,261584,137458.5,slower,354458,132208,217375,137458.5,slower,122792,37375,72750,55500.0,slower
+"Apple Silicon, native macOS",paired/projection,spark-off,total_ns,slower,597125,246958,350167,255708.0,slower,538126,255917,281583,255708.0,slower,180125,70833,84374,84625.0,within floor
+"Apple Silicon, native macOS",paired/projection,spark-on,logical_ns,within floor,254208,124083,126708,146187.0,within floor,212000,123459,74333,146187.0,within floor,53916,33666,16833,44124.5,within floor
+"Apple Silicon, native macOS",paired/projection,spark-on,physical_ns,slower,469792,124708,344459,223812.5,slower,370292,132208,242834,223812.5,slower,115750,37375,71625,71041.5,slower
+"Apple Silicon, native macOS",paired/projection,spark-on,total_ns,slower,734667,246958,488376,380604.5,slower,586459,255917,331501,380604.5,within floor,168792,70833,86292,115062.0,within floor
+"Apple Silicon, native macOS",paired/row_number,spark-off,logical_ns,slower,519667,273042,236042,193291.5,slower,546500,273625,266666,193291.5,slower,159958,60500,62417,36687.5,slower
+"Apple Silicon, native macOS",paired/row_number,spark-off,physical_ns,slower,1515709,730333,782542,526687.5,slower,1721958,769417,811500,526687.5,slower,557916,190875,248334,128104.5,slower
+"Apple Silicon, native macOS",paired/row_number,spark-off,total_ns,slower,2119418,1027375,1031791,802187.5,slower,2288876,1015666,1077874,802187.5,slower,714374,247417,312168,161083.5,slower
+"Apple Silicon, native macOS",paired/row_number,spark-on,logical_ns,slower,464541,273042,178459,205687.5,within floor,492125,273625,205250,205687.5,within floor,103625,60500,43125,49520.5,within floor
+"Apple Silicon, native macOS",paired/row_number,spark-on,physical_ns,slower,1257375,730333,487917,565209.0,within floor,1516833,769417,645208,565209.0,slower,350250,190875,163542,131166.0,slower
+"Apple Silicon, native macOS",paired/row_number,spark-on,total_ns,slower,1718124,1027375,662291,754500.5,within floor,2025291,1015666,844374,754500.5,slower,441458,247417,195833,173708.5,slower
+"Apple Silicon, native macOS",paired/struct_access,spark-off,logical_ns,slower,301667,233625,86417,90833,within floor,358167,201875,133416,90833,slower,122834,85000,29625,50875.0,within floor
+"Apple Silicon, native macOS",paired/struct_access,spark-off,physical_ns,slower,964334,680709,344083,280543,slower,1302625,605708,575001,280543,slower,464291,261958,158957,177833.0,within floor
+"Apple Silicon, native macOS",paired/struct_access,spark-off,total_ns,slower,1258251,927333,425875,445417,within floor,1655167,827292,687082,445417,slower,585999,346583,183581,228666.0,within floor
+"Apple Silicon, native macOS",paired/struct_access,spark-on,logical_ns,slower,381458,233625,179042,145312.5,slower,302166,201875,106792,145312.5,within floor,78333,85000,29124,52625.5,within floor
+"Apple Silicon, native macOS",paired/struct_access,spark-on,physical_ns,slower,1286333,680709,694916,417271.5,slower,980375,605708,499667,417271.5,slower,292875,261958,135624,174437.5,within floor
+"Apple Silicon, native macOS",paired/struct_access,spark-on,total_ns,slower,1700709,927333,871124,550292.0,slower,1284083,827292,584625,550292.0,slower,372000,346583,159999,227978.5,within floor
+"Apple Silicon, native macOS",paired/three_way_join,spark-off,logical_ns,slower,457916,281333,191333,179770.5,slower,506709,303250,233459,179770.5,slower,157417,84458,46791,65521.0,within floor
+"Apple Silicon, native macOS",paired/three_way_join,spark-off,physical_ns,slower,2592292,1428042,1180001,891542.0,slower,3210834,1594375,1659876,891542.0,slower,1061167,445291,422584,408416.0,slower
+"Apple Silicon, native macOS",paired/three_way_join,spark-off,total_ns,slower,3099833,1684417,1342376,967146.0,slower,3812875,1957208,1763835,967146.0,slower,1218584,528334,466292,465853.5,slower
+"Apple Silicon, native macOS",paired/three_way_join,spark-on,logical_ns,slower,643625,281333,317958,236374.5,slower,560458,303250,257208,236374.5,slower,157584,84458,38876,63792.0,within floor
+"Apple Silicon, native macOS",paired/three_way_join,spark-on,physical_ns,slower,3607292,1428042,1941583,916500.0,slower,2865291,1594375,1282833,916500.0,slower,1051209,445291,364793,404250.0,within floor
+"Apple Silicon, native macOS",paired/three_way_join,spark-on,total_ns,slower,4209250,1684417,2461375,1125188.0,slower,3447167,1957208,1505916,1125188.0,slower,1208793,528334,403625,467395.5,within floor
+"Apple Silicon, native macOS",paired/union_all,spark-off,logical_ns,slower,427291,146292,272166,143124.5,slower,407167,167375,253000,143124.5,slower,164750,67583,87041,55896.0,slower
+"Apple Silicon, native macOS",paired/union_all,spark-off,physical_ns,slower,981542,299083,688667,295416.5,slower,937667,343541,594126,295416.5,slower,414625,142125,252125,132646.0,slower
+"Apple Silicon, native macOS",paired/union_all,spark-off,total_ns,slower,1409125,456167,921541,517520.5,slower,1375500,504708,870792,517520.5,slower,579375,210208,334376,186498.5,slower
+"Apple Silicon, native macOS",paired/union_all,spark-on,logical_ns,slower,446291,146292,284458,142145.5,slower,493708,167375,328666,142145.5,slower,165333,67583,88583,67625.0,slower
+"Apple Silicon, native macOS",paired/union_all,spark-on,physical_ns,slower,1049667,299083,683959,347416.5,slower,1175250,343541,787709,347416.5,slower,415542,142125,248708,159499.5,slower
+"Apple Silicon, native macOS",paired/union_all,spark-on,total_ns,slower,1514542,456167,946001,437666.5,slower,1650958,504708,1089792,437666.5,slower,581166,210208,341625,225895.5,slower
+"Apple Silicon, native macOS",paired/window_sum,spark-off,logical_ns,slower,549333,286916,215959,206895.5,slower,494208,271334,222874,206895.5,slower,171916,83291,40125,45500.0,within floor
+"Apple Silicon, native macOS",paired/window_sum,spark-off,physical_ns,slower,1471750,680000,618542,600958.5,slower,1389958,664750,651458,600958.5,slower,533292,215542,193500,191312.0,slower
+"Apple Silicon, native macOS",paired/window_sum,spark-off,total_ns,slower,1982708,980501,885417,813437.5,slower,1895000,939208,882916,813437.5,slower,707083,290625,233625,234771.0,within floor
+"Apple Silicon, native macOS",paired/window_sum,spark-on,logical_ns,slower,437625,286916,156875,260188.0,within floor,513791,271334,239375,260188.0,within floor,115500,83291,34041,68770.5,within floor
+"Apple Silicon, native macOS",paired/window_sum,spark-on,physical_ns,slower,1194333,680000,501167,563875.0,within floor,1317583,664750,654542,563875.0,slower,338417,215542,149334,196458.0,within floor
+"Apple Silicon, native macOS",paired/window_sum,spark-on,total_ns,slower,1662001,980501,657875,875625.0,within floor,1930917,939208,831375,875625.0,within floor,456958,290625,193750,265458.0,within floor
+"Apple Silicon, native macOS",stress/case_200,spark-off,logical_ns,slower,9122667,4219667,4989666,1056562.0,slower,9043375,3980667,4890834,1056562.0,slower,2446209,1289417,1153333,165498,slower
+"Apple Silicon, native macOS",stress/case_200,spark-off,physical_ns,slower,17799916,15331125,3059958,2700271.5,slower,17763000,14379709,3132832,2700271.5,slower,5342584,4742708,598375,403604.0,slower
+"Apple Silicon, native macOS",stress/case_200,spark-off,total_ns,slower,27311625,19270083,8041542,3947979.0,slower,27279166,18418833,8169875,3947979.0,slower,7800083,6035416,1792750,567416.0,slower
+"Apple Silicon, native macOS",stress/case_200,spark-on,logical_ns,slower,9049834,4219667,4934374,1932895.5,slower,8954750,3980667,4961500,1932895.5,slower,2470292,1289417,1167917,147270.5,slower
+"Apple Silicon, native macOS",stress/case_200,spark-on,physical_ns,slower,17823833,15331125,2325792,3225604.0,within floor,17572083,14379709,2769832,3225604.0,within floor,5565292,4742708,830875,373230.0,slower
+"Apple Silicon, native macOS",stress/case_200,spark-on,total_ns,slower,26928957,19270083,7658874,4400291.0,slower,26833084,18418833,8251542,4400291.0,slower,8087583,6035416,2122833,528770.0,slower
+"Apple Silicon, native macOS",stress/cte_eight,spark-off,logical_ns,within floor,945041,1311917,-394208,469999.5,within floor,887375,1359167,-457625,469999.5,within floor,241416,439208,-223000,185208.0,faster
+"Apple Silicon, native macOS",stress/cte_eight,spark-off,physical_ns,slower,3227042,946458,2292375,786562.5,slower,3274250,919583,2163541,786562.5,slower,997708,252250,713875,250646.0,slower
+"Apple Silicon, native macOS",stress/cte_eight,spark-off,total_ns,slower,4175959,2247541,1881501,1257312.5,slower,4156000,2269916,1690168,1257312.5,slower,1252708,691125,475417,439292.0,slower
+"Apple Silicon, native macOS",stress/cte_eight,spark-on,logical_ns,within floor,831375,1311917,-521333,533020.0,within floor,864833,1359167,-530082,533020.0,within floor,245458,439208,-209459,196500.0,faster
+"Apple Silicon, native macOS",stress/cte_eight,spark-on,physical_ns,slower,3068667,946458,2072209,963917,slower,3165583,919583,2263167,963917,slower,1001042,252250,735250,271916.5,slower
+"Apple Silicon, native macOS",stress/cte_eight,spark-on,total_ns,slower,3836833,2247541,1608333,1334146.5,slower,4038583,2269916,1748000,1334146.5,slower,1242251,691125,524791,463333.0,slower
+"Apple Silicon, native macOS",stress/in_1000,spark-off,logical_ns,slower,5557583,2468500,3103251,1093854.5,slower,5247625,2437917,2838249,1093854.5,slower,690500,802208,-147958,56812.0,faster
+"Apple Silicon, native macOS",stress/in_1000,spark-off,physical_ns,within floor,12403792,10236458,2097708,2323729.0,within floor,12136333,10080167,2081333,2323729.0,within floor,4025375,3337042,473750,225687.5,slower
+"Apple Silicon, native macOS",stress/in_1000,spark-off,total_ns,slower,17948417,12825833,5122584,3499270.5,slower,17508501,12562416,5013250,3499270.5,slower,4733418,4146458,323959,265020.5,slower
+"Apple Silicon, native macOS",stress/in_1000,spark-on,logical_ns,slower,5573833,2468500,3175833,1772417,slower,5366584,2437917,2917749,1772417,slower,693458,802208,-132333,65479.0,faster
+"Apple Silicon, native macOS",stress/in_1000,spark-on,physical_ns,within floor,12879542,10236458,2367000,3251958,within floor,12556958,10080167,2552750,3251958,within floor,3919792,3337042,451958,307938.0,slower
+"Apple Silicon, native macOS",stress/in_1000,spark-on,total_ns,slower,18397042,12825833,5819375,5535417,slower,18397334,12562416,5834918,5535417,slower,4615708,4146458,323666,332208.0,within floor
+"Apple Silicon, native macOS",stress/join_six,spark-off,logical_ns,slower,924417,415875,516167,273687.5,slower,861375,380334,485834,273687.5,slower,354292,172625,157999,62270.5,slower
+"Apple Silicon, native macOS",stress/join_six,spark-off,physical_ns,slower,4568750,2645958,2115875,1761812.5,slower,4496500,2563708,1928959,1761812.5,slower,1902250,1222416,564667,402979.0,slower
+"Apple Silicon, native macOS",stress/join_six,spark-off,total_ns,slower,5424500,3099500,2529708,2002166.0,slower,5412917,2944417,2472167,2002166.0,slower,2186583,1395958,697875,458937.0,slower
+"Apple Silicon, native macOS",stress/join_six,spark-on,logical_ns,slower,960959,415875,526917,300938.0,slower,1098917,380334,696709,300938.0,slower,354625,172625,127541,62770.5,slower
+"Apple Silicon, native macOS",stress/join_six,spark-on,physical_ns,slower,4843417,2645958,2315833,1437000.0,slower,5869375,2563708,3224958,1437000.0,slower,1958166,1222416,571916,305125.0,slower
+"Apple Silicon, native macOS",stress/join_six,spark-on,total_ns,slower,5679166,3099500,2848292,1780562.0,slower,6955375,2944417,3889166,1780562.0,slower,2356707,1395958,694458,322374.5,slower
+"Apple Silicon, native macOS",stress/wide_400,spark-off,logical_ns,within floor,6814292,5104208,1632292,1540480.0,slower,6735292,5103375,1509625,1540480.0,within floor,2152708,2159542,14292,280459.0,within floor
+"Apple Silicon, native macOS",stress/wide_400,spark-off,physical_ns,slower,34673625,8631333,25664376,3862313.5,slower,31732750,8610334,23059875,3862313.5,slower,9999166,3471292,6442541,767062.5,slower
+"Apple Silicon, native macOS",stress/wide_400,spark-off,total_ns,slower,41549833,13997624,27890709,4976875.0,slower,38345750,13737208,24186084,4976875.0,slower,12091541,5655417,6363166,1043250.5,slower
+"Apple Silicon, native macOS",stress/wide_400,spark-on,logical_ns,within floor,6785791,5104208,1549625,1215125.0,slower,6720750,5103375,1707958,1215125.0,slower,2106125,2159542,-53417,263271.0,within floor
+"Apple Silicon, native macOS",stress/wide_400,spark-on,physical_ns,slower,34281791,8631333,25500167,3109500.0,slower,30883625,8610334,22267416,3109500.0,slower,9828167,3471292,6431583,817499.5,slower
+"Apple Silicon, native macOS",stress/wide_400,spark-on,total_ns,slower,41093084,13997624,27027207,4774478.5,slower,37578792,13737208,23814417,4774478.5,slower,11941958,5655417,6370541,1036104.0,slower
