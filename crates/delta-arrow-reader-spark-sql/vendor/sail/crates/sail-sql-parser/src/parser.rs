@@ -1,8 +1,9 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
-use chumsky::extra::ParserExtra;
-use chumsky::input::{Input, ValueInput};
+use chumsky::error::EmptyErr;
+use chumsky::extra::{Err, ParserExtra};
+use chumsky::input::{Input, InputRef, ValueInput};
 use chumsky::label::LabelError;
-use chumsky::prelude::{Recursive, end, recursive};
+use chumsky::prelude::{Recursive, custom, end, recursive};
 use chumsky::{IterParser, Parser};
 
 use crate::ast::data_type::DataType;
@@ -14,9 +15,9 @@ use crate::ast::query::{Query, TableRelation};
 use crate::ast::statement::Statement;
 use crate::options::ParserOptions;
 use crate::span::TokenSpan;
-use crate::token::{Token, TokenLabel};
+use crate::token::{Keyword, Punctuation, Token, TokenLabel};
 use crate::tree::TreeParser;
-use crate::utils::whitespace;
+use crate::utils::{skip_whitespace, whitespace};
 
 fn statement<'a, I, E>(options: &'a ParserOptions) -> impl Parser<'a, I, Statement, E> + Clone
 where
@@ -57,7 +58,8 @@ where
     statement
 }
 
-fn statement_with_weak_backedges<'a, I, E>(
+fn statement_with_weak_backedges<'a, I, E, P>(
+    expression: P,
     options: &'a ParserOptions,
 ) -> impl Parser<'a, I, Statement, E> + Clone
 where
@@ -65,11 +67,11 @@ where
     I::Span: Into<TokenSpan> + Clone,
     E: ParserExtra<'a, I> + 'a,
     E::Error: LabelError<'a, I, TokenLabel>,
+    P: Parser<'a, I, Expr, E> + Clone + 'a,
 {
     recursive(|statement| {
         let data_type = recursive(|data_type| DataType::parser(data_type, options));
         // A separate top-level query keeps every recursive backedge weak.
-        let expression = expression(options);
         let query = recursive(|query| {
             let table_relation = recursive(|table_relation| {
                 TableRelation::parser((query.clone(), expression.clone(), table_relation), options)
@@ -109,17 +111,28 @@ where
     E: ParserExtra<'a, I> + 'a,
     E::Error: LabelError<'a, I, TokenLabel>,
 {
-    // Weak recursive backedges let interval and scoped statement graphs be dropped.
-    recursive(|expression| {
-        let data_type = recursive(|data_type| DataType::parser(data_type, options));
-        let query = recursive(|query| {
-            let table_relation = recursive(|table_relation| {
-                TableRelation::parser((query.clone(), expression.clone(), table_relation), options)
-            });
-            Query::parser((query, expression.clone(), table_relation), options)
+    recursive(|expression| expression_with_weak_backedges(expression, options))
+}
+
+fn expression_with_weak_backedges<'a, I, E, P>(
+    expression: P,
+    options: &'a ParserOptions,
+) -> impl Parser<'a, I, Expr, E> + Clone
+where
+    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
+    I::Span: Into<TokenSpan> + Clone,
+    E: ParserExtra<'a, I> + 'a,
+    E::Error: LabelError<'a, I, TokenLabel>,
+    P: Parser<'a, I, Expr, E> + Clone + 'a,
+{
+    let data_type = recursive(|data_type| DataType::parser(data_type, options));
+    let query = recursive(|query| {
+        let table_relation = recursive(|table_relation| {
+            TableRelation::parser((query.clone(), expression.clone(), table_relation), options)
         });
-        Expr::parser((expression, query, data_type), options)
-    })
+        Query::parser((query, expression.clone(), table_relation), options)
+    });
+    Expr::parser((expression, query, data_type), options)
 }
 
 fn interval_literal<'a, I, E>(
@@ -170,7 +183,55 @@ where
     E: ParserExtra<'a, I> + 'a,
     E::Error: LabelError<'a, I, TokenLabel>,
 {
-    statement_list(statement_with_weak_backedges(options), options)
+    statement_list(
+        statement_with_weak_backedges(expression(options), options),
+        options,
+    )
+}
+
+/// The diagnostic-free statement path can skip precedence parsing for a
+/// standalone integer when the next token proves the expression has ended.
+pub fn create_scoped_statement_parser_without_diagnostics<'a, I>(
+    options: &'a ParserOptions,
+) -> impl Parser<'a, I, Vec<Statement>, Err<EmptyErr>> + Clone
+where
+    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
+    I::Span: Into<TokenSpan> + Clone,
+{
+    let expression = recursive(|expression| {
+        terminated_integer().or(expression_with_weak_backedges(expression, options))
+    });
+    statement_list(statement_with_weak_backedges(expression, options), options)
+}
+
+fn terminated_integer<'a, I>() -> impl Parser<'a, I, Expr, Err<EmptyErr>> + Clone
+where
+    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
+    I::Span: Into<TokenSpan>,
+{
+    custom(|input: &mut InputRef<'a, '_, I, Err<EmptyErr>>| {
+        let start = input.cursor();
+        let Some(Token::Word { raw, keyword: None }) = input.next() else {
+            return Err(EmptyErr::default());
+        };
+        if raw.is_empty() || !raw.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(EmptyErr::default());
+        }
+        let span = input.span_since(&start).into();
+        skip_whitespace(input);
+        match input.peek() {
+            Some(Token::Punctuation(Punctuation::Comma | Punctuation::RightParenthesis))
+            | Some(Token::Word {
+                keyword: Some(Keyword::When | Keyword::Else | Keyword::End),
+                ..
+            }) => Ok(Expr::Atom(AtomExpr::NumberLiteral(NumberLiteral {
+                span,
+                value: raw.to_owned(),
+                suffix: None,
+            }))),
+            _ => Err(EmptyErr::default()),
+        }
+    })
 }
 
 fn statement_list<'a, I, E, P>(

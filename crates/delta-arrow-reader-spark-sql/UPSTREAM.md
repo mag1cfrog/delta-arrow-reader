@@ -2641,6 +2641,16 @@ Parser construction still runs for each call, and rejected input pays for the
 failed diagnostic-free attempt before the Rich fallback. No construction savings
 or measured performance result is claimed here.
 
+### Standalone integer expressions in statements (#1390)
+
+The diagnostic-free statement parser recognizes an unsigned ASCII
+integer token before an expression delimiter without entering the
+precedence parser. The number keeps its exact text and source span.
+Other token sequences use the existing expression grammar. The public
+statement parser still reruns the original Rich grammar on a rejection.
+The [grammar attribution](benches/reports/planning-1390-macos-integer-grammar-attribution.md)
+records the IN and CASE paths.
+
 ### Wide scan rename projection (#1390)
 
 For scans with at least 64 uniquely named fields, a single table qualifier

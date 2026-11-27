@@ -1,0 +1,71 @@
+{
+  "builds": [
+    {
+      "source": "1d74a82d50d68c75c119a5f7f9411e9d81767c0f",
+      "profile": "release",
+      "rustc": "1.96.0",
+      "binaries": {
+        "planning_attribution": "9d50a1ce13414397b01b3313b3af17e8d8e6feccddf04f049e7473135e8a0636",
+        "planning": "e4dd41aeac0e88aaadada605d7a771a31a47feade50a5b61db5fc6103c3cdb5d"
+      },
+      "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+      "overlays": {
+        "benches/planning.rs": "3943375027b4923aab4645aec54432644ba8df2eed942b8998fbcd9d0b5f89bd",
+        "benches/planning_attribution/driver.rs": "7c69c5d7aa05ec3a93b21cc7e732f6fe1f82d627d26994c6e774eabe85f441c9",
+        "benches/planning_attribution_fixture.rs": "60dab719c9e28e1236b3c5c5cd40e7df382dd1409235fb5f55fad4ffa9073694",
+        "benches/planning_attribution_entry.rs": "1beb885c8c2e141bed74b4a418e4783e1412bcf13e71225a8a101c355f6715df",
+        "Cargo.toml": "6da0541d63d01a9315a1e77d41faaefc34274a86cd180ed60795a9fb551035a6"
+      }
+    },
+    {
+      "source": "ca853a885d6e28c0bb51ea9c14ddcc52a6d4dd83",
+      "profile": "release",
+      "rustc": "1.96.0",
+      "binaries": {
+        "planning_attribution": "f2331d8610954e2d45deeaf5749cad92444c997a036785ab5210f7a813b0fc03",
+        "planning": "8b6aa3ac81a7e1726a486970da11d86d310e8ee931938b17c83b119519a93f06"
+      },
+      "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+      "overlays": {
+        "benches/planning.rs": "3943375027b4923aab4645aec54432644ba8df2eed942b8998fbcd9d0b5f89bd",
+        "benches/planning_attribution/driver.rs": "7c69c5d7aa05ec3a93b21cc7e732f6fe1f82d627d26994c6e774eabe85f441c9",
+        "benches/planning_attribution_fixture.rs": "60dab719c9e28e1236b3c5c5cd40e7df382dd1409235fb5f55fad4ffa9073694",
+        "benches/planning_attribution_entry.rs": "1beb885c8c2e141bed74b4a418e4783e1412bcf13e71225a8a101c355f6715df",
+        "Cargo.toml": "6da0541d63d01a9315a1e77d41faaefc34274a86cd180ed60795a9fb551035a6"
+      }
+    }
+  ],
+  "traces": {
+    "native-configured": {
+      "rows": 30,
+      "before_sha256": "87e7f32a720ac3af106f329adac9747b19b3ebe6f8074e77a93b1f859b1e08fe",
+      "after_sha256": "87e7f32a720ac3af106f329adac9747b19b3ebe6f8074e77a93b1f859b1e08fe"
+    },
+    "spark-off": {
+      "rows": 309,
+      "before_sha256": "18a9367273413cfe24255ac80cab147e7fb80e9527b824bd4a8d3d942524153f",
+      "after_sha256": "18a9367273413cfe24255ac80cab147e7fb80e9527b824bd4a8d3d942524153f"
+    },
+    "spark-on": {
+      "rows": 309,
+      "before_sha256": "6012dc16b9c4d50bad5a8b8ebb41d2dad5b9eafd289902660b98d26f421dcaf2",
+      "after_sha256": "6012dc16b9c4d50bad5a8b8ebb41d2dad5b9eafd289902660b98d26f421dcaf2"
+    },
+    "native-plain": {
+      "rows": 30,
+      "before_sha256": "5818e119c178fae96bc4ec635b3a6cfd7a18afc7b53f9c2162f8317ad8b08045",
+      "after_sha256": "5818e119c178fae96bc4ec635b3a6cfd7a18afc7b53f9c2162f8317ad8b08045"
+    }
+  },
+  "typed_result_checks_per_build": 120,
+  "protocol_sha256": "3d48f0128388e8cc099a50efa6ac6564f924ca072ac263dd0b9f37fa48efd30b",
+  "parser_differential_tests": {
+    "source": "ca853a885d6e28c0bb51ea9c14ddcc52a6d4dd83",
+    "crate": "sail-sql-analyzer",
+    "reference": "existing Rich statement grammar",
+    "passed": [
+      "parser::tests::standalone_integer_statements_match_the_original_grammar",
+      "parser::tests::statement_scoped_and_rich_paths_preserve_boundaries"
+    ]
+  }
+}
