@@ -1,0 +1,106 @@
+{
+  "parsers/interval_day_time/spark-off": {
+    "status": "ok",
+    "before": 37928125,
+    "after": 36820417,
+    "delta": -948459,
+    "floor": 2211083.0,
+    "decision": "within floor"
+  },
+  "parsers/interval_day_time/spark-on": {
+    "status": "ok",
+    "before": 37888042,
+    "after": 36900334,
+    "delta": -932749,
+    "floor": 2047583.0,
+    "decision": "within floor"
+  },
+  "parsers/interval_calendar/native": {
+    "status": "ok",
+    "before": 32288083,
+    "after": 32025667,
+    "delta": -218917,
+    "floor": 1780375.0,
+    "decision": "within floor"
+  },
+  "parsers/interval_calendar/spark-off": {
+    "status": "ok",
+    "before": 41479625,
+    "after": 40028375,
+    "delta": -1432624,
+    "floor": 1439667.0,
+    "decision": "within floor"
+  },
+  "parsers/interval_calendar/spark-on": {
+    "status": "ok",
+    "before": 41270750,
+    "after": 39940000,
+    "delta": -1326709,
+    "floor": 1397833.0,
+    "decision": "within floor"
+  },
+  "parsers/interval_year_month/native": {
+    "status": "ok",
+    "before": 32028917,
+    "after": 32038625,
+    "delta": 34917,
+    "floor": 1626541.5,
+    "decision": "within floor"
+  },
+  "parsers/interval_year_month/spark-off": {
+    "status": "ok",
+    "before": 35470833,
+    "after": 35023333,
+    "delta": -422791,
+    "floor": 1809125.0,
+    "decision": "within floor"
+  },
+  "parsers/interval_year_month/spark-on": {
+    "status": "ok",
+    "before": 35476167,
+    "after": 34817208,
+    "delta": -427458,
+    "floor": 1265166.5,
+    "decision": "within floor"
+  },
+  "parsers/interval_year_month_quoted/native": {
+    "status": "ok",
+    "before": 31950542,
+    "after": 32008083,
+    "delta": -28708,
+    "floor": 1174895.5,
+    "decision": "within floor"
+  },
+  "parsers/interval_year_month_quoted/spark-off": {
+    "status": "ok",
+    "before": 39864958,
+    "after": 39812041,
+    "delta": -240916,
+    "floor": 847146.0,
+    "decision": "within floor"
+  },
+  "parsers/interval_year_month_quoted/spark-on": {
+    "status": "ok",
+    "before": 39621333,
+    "after": 39722333,
+    "delta": -86041,
+    "floor": 962270.5,
+    "decision": "within floor"
+  },
+  "parsers/interval_day_time_input/spark-off": {
+    "status": "ok",
+    "before": 32582375,
+    "after": 32660417,
+    "delta": 62333,
+    "floor": 2867771.0,
+    "decision": "within floor"
+  },
+  "parsers/interval_day_time_input/spark-on": {
+    "status": "ok",
+    "before": 32627917,
+    "after": 32612542,
+    "delta": -16417,
+    "floor": 2078124.5,
+    "decision": "within floor"
+  }
+}
