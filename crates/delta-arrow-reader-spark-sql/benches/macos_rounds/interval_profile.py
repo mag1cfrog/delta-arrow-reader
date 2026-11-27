@@ -86,8 +86,12 @@ def capture(binary, shape, work, deadline, protocol):
                 worker.kill()
             stdout, _ = worker.communicate()
             status = "timeout"
-    result = json.loads(stdout) if status == "ok" else None
-    if result is not None and (result.get("calls") != protocol["calls_per_process"] or not result.get("wall_ns")):
+    try:
+        result = json.loads(stdout)
+    except json.JSONDecodeError:
+        result = None
+    if status == "ok" and (result is None or result.get("calls") != protocol["calls_per_process"]
+                           or not result.get("wall_ns")):
         status = "invalid call count"
     return {"status": status, "result": result, "stacks": path.read_text() if path.is_file() else ""}
 
