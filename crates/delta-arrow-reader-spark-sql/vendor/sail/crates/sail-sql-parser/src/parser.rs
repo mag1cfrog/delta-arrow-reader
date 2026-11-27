@@ -72,13 +72,27 @@ where
     recursive(|statement| {
         let data_type = recursive(|data_type| DataType::parser(data_type, options));
         // A separate top-level query keeps every recursive backedge weak.
-        let query = recursive(|query| {
-            let table_relation = recursive(|table_relation| {
-                TableRelation::parser((query.clone(), expression.clone(), table_relation), options)
-            });
-            Query::parser((query, expression.clone(), table_relation), options)
-        });
+        let query = query_with_weak_backedges(expression.clone(), options);
         Statement::parser((statement, query, expression, data_type), options)
+    })
+}
+
+fn query_with_weak_backedges<'a, I, E, P>(
+    expression: P,
+    options: &'a ParserOptions,
+) -> impl Parser<'a, I, Query, E> + Clone
+where
+    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
+    I::Span: Into<TokenSpan> + Clone,
+    E: ParserExtra<'a, I> + 'a,
+    E::Error: LabelError<'a, I, TokenLabel>,
+    P: Parser<'a, I, Expr, E> + Clone + 'a,
+{
+    recursive(|query| {
+        let table_relation = recursive(|table_relation| {
+            TableRelation::parser((query.clone(), expression.clone(), table_relation), options)
+        });
+        Query::parser((query, expression, table_relation), options)
     })
 }
 
@@ -198,10 +212,33 @@ where
     I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
     I::Span: Into<TokenSpan> + Clone,
 {
-    let expression = recursive(|expression| {
-        terminated_integer().or(expression_with_weak_backedges(expression, options))
-    });
+    let expression = statement_expression_without_diagnostics(options);
     statement_list(statement_with_weak_backedges(expression, options), options)
+}
+
+/// Parse a statement list containing only queries with the scoped expression grammar.
+pub fn create_scoped_query_statement_parser_without_diagnostics<'a, I>(
+    options: &'a ParserOptions,
+) -> impl Parser<'a, I, Vec<Statement>, Err<EmptyErr>> + Clone
+where
+    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
+    I::Span: Into<TokenSpan> + Clone,
+{
+    let expression = statement_expression_without_diagnostics(options);
+    let query = query_with_weak_backedges(expression, options);
+    statement_list(query.map(Statement::Query), options)
+}
+
+fn statement_expression_without_diagnostics<'a, I>(
+    options: &'a ParserOptions,
+) -> impl Parser<'a, I, Expr, Err<EmptyErr>> + Clone
+where
+    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
+    I::Span: Into<TokenSpan> + Clone,
+{
+    recursive(|expression| {
+        terminated_integer().or(expression_with_weak_backedges(expression, options))
+    })
 }
 
 fn terminated_integer<'a, I>() -> impl Parser<'a, I, Expr, Err<EmptyErr>> + Clone

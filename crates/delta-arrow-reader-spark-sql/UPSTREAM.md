@@ -2651,6 +2651,16 @@ statement parser still reruns the original Rich grammar on a rejection.
 The [grammar attribution](benches/reports/planning-1390-macos-integer-grammar-attribution.md)
 records the IN and CASE paths.
 
+### Query statement parser construction (#1390)
+
+The diagnostic-free parser tries the existing scoped query grammar
+directly when the first statement starts with SELECT or WITH. It
+uses the same expression grammar and statement delimiters. Other
+inputs and rejected query attempts use the full statement grammar
+on the same tokens. The existing Rich parser supplies diagnostics
+for statement failures. The [parser construction attribution](benches/reports/planning-1390-macos-query-factory-attribution.md)
+records the ordinary query paths.
+
 ### Wide scan rename projection (#1390)
 
 For scans with at least 64 uniquely named fields, a single table qualifier

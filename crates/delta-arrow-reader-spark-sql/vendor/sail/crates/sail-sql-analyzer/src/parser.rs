@@ -15,9 +15,10 @@ use sail_sql_parser::options::ParserOptions;
 use sail_sql_parser::parser::{
     create_data_type_parser, create_interval_literal_parser,
     create_numeric_interval_literal_parser, create_object_name_parser, create_parser,
+    create_scoped_query_statement_parser_without_diagnostics,
     create_scoped_statement_parser_without_diagnostics,
 };
-use sail_sql_parser::token::{Punctuation, Token};
+use sail_sql_parser::token::{Keyword, Punctuation, Token};
 
 use crate::error::{SqlError, SqlResult};
 use crate::literal::datetime::{
@@ -82,12 +83,29 @@ fn parse_statements_without_diagnostics(s: &str) -> Option<Vec<Statement>> {
     let options = ParserOptions::default();
     let lexer = create_lexer::<_, chumsky::extra::Err<chumsky::error::EmptyErr>>(&options);
     let tokens = lexer.parse(s).into_result().ok()?;
-    let tokens = tokens
-        .as_slice()
-        .map((s.len()..s.len()).into(), map_parser_input);
+    let first = tokens.iter().map(|(token, _)| token).find(|token| {
+        !token.is_whitespace() && !matches!(token, Token::Punctuation(Punctuation::Semicolon))
+    });
+    let input = || {
+        tokens
+            .as_slice()
+            .map((s.len()..s.len()).into(), map_parser_input)
+    };
+    if matches!(
+        first,
+        Some(Token::Word {
+            keyword: Some(Keyword::Select | Keyword::With),
+            ..
+        })
+    ) && let Ok(statements) = create_scoped_query_statement_parser_without_diagnostics(&options)
+        .parse(input())
+        .into_result()
+    {
+        return Some(statements);
+    }
     let parser = create_scoped_statement_parser_without_diagnostics(&options);
     // Only complete, error-free parses bypass the original Rich diagnostic path.
-    parser.parse(tokens).into_result().ok()
+    parser.parse(input()).into_result().ok()
 }
 
 /// Parses a SQL string containing exactly one statement into an AST.
@@ -452,6 +470,25 @@ mod tests {
             "SELECT 1 IN (1, 2",
             "SELECT CASE WHEN 1 = 1 THEN 2 ELSE END",
         ];
+        for sql in valid {
+            assert_equivalent(sql, sql, true);
+        }
+        for sql in invalid {
+            assert_equivalent(sql, sql, false);
+        }
+    }
+
+    #[test]
+    fn query_statement_lists_match_the_original_grammar() {
+        let valid = [
+            "; /* query */ SELECT 1;",
+            "WITH t AS (SELECT 1 AS n) SELECT n FROM t",
+            "SELECT (SELECT 1); SELECT 2",
+            "SELECT 1; SHOW CATALOGS",
+            "SELECT 1; DROP TABLE t",
+            "SHOW CATALOGS; SELECT 2",
+        ];
+        let invalid = ["SELECT (", "SELECT 1; SELECT (", "WITH t AS (SELECT 1)"];
         for sql in valid {
             assert_equivalent(sql, sql, true);
         }
