@@ -1,0 +1,74 @@
+{
+  "full": {
+    "native": {
+      "staging": [
+        "ProjectionExec: expr=[id@0 as id, array_concat(array_slice(arr@2, 1, 1), make_array(i@1), array_slice(arr@2, 2, 3)) as value]",
+        "  DataSourceExec: partitions=1, partition_sizes=[123]"
+      ],
+      "candidate": [
+        "ProjectionExec: expr=[id@0 as id, array_concat(array_slice(arr@2, 1, 1), make_array(i@1), array_slice(arr@2, 2, 3)) as value]",
+        "  DataSourceExec: partitions=1, partition_sizes=[123]"
+      ]
+    },
+    "spark-off": {
+      "staging": [
+        "ProjectionExec: expr=[#36@0 as id, #37@1 as value]",
+        "  ProjectionExec: expr=[id@0 as #36, CASE WHEN arr@2 IS NULL THEN arr@2 WHEN 1 <= CAST(array_length(arr@2) AS Int64) - 1 THEN spark_insert_bigint_at_second_position(arr@2, i@1) WHEN array_length(arr@2) = 1 THEN array_append(arr@2, i@1) WHEN array_length(arr@2) < 1 THEN array_concat(arr@2, CAST(array_repeat(NULL, 1 - CAST(array_length(arr@2) AS Int64)) AS List(Int64)), array_repeat(i@1, 1)) END as #37]",
+        "    DataSourceExec: partitions=1, partition_sizes=[123]"
+      ],
+      "candidate": [
+        "ProjectionExec: expr=[#36@0 as id, #37@1 as value]",
+        "  ProjectionExec: expr=[id@0 as #36, CASE WHEN arr@2 IS NULL THEN arr@2 WHEN spark_array_has_second_position(arr@2) THEN spark_insert_bigint_at_second_position(arr@2, i@1) WHEN array_length(arr@2) = 1 THEN array_append(arr@2, i@1) WHEN array_length(arr@2) < 1 THEN array_concat(arr@2, CAST(array_repeat(NULL, 1 - CAST(array_length(arr@2) AS Int64)) AS List(Int64)), array_repeat(i@1, 1)) END as #37]",
+        "    DataSourceExec: partitions=1, partition_sizes=[123]"
+      ]
+    },
+    "spark-on": {
+      "staging": [
+        "ProjectionExec: expr=[#36@0 as id, #37@1 as value]",
+        "  ProjectionExec: expr=[id@0 as #36, CASE WHEN arr@2 IS NULL THEN arr@2 WHEN 1 <= CAST(array_length(arr@2) AS Int64) - 1 THEN spark_insert_bigint_at_second_position(arr@2, i@1) WHEN array_length(arr@2) = 1 THEN array_append(arr@2, i@1) WHEN array_length(arr@2) < 1 THEN array_concat(arr@2, CAST(array_repeat(NULL, 1 - CAST(array_length(arr@2) AS Int64)) AS List(Int64)), array_repeat(i@1, 1)) END as #37]",
+        "    DataSourceExec: partitions=1, partition_sizes=[123]"
+      ],
+      "candidate": [
+        "ProjectionExec: expr=[#36@0 as id, #37@1 as value]",
+        "  ProjectionExec: expr=[id@0 as #36, CASE WHEN arr@2 IS NULL THEN arr@2 WHEN spark_array_has_second_position(arr@2) THEN spark_insert_bigint_at_second_position(arr@2, i@1) WHEN array_length(arr@2) = 1 THEN array_append(arr@2, i@1) WHEN array_length(arr@2) < 1 THEN array_concat(arr@2, CAST(array_repeat(NULL, 1 - CAST(array_length(arr@2) AS Int64)) AS List(Int64)), array_repeat(i@1, 1)) END as #37]",
+        "    DataSourceExec: partitions=1, partition_sizes=[123]"
+      ]
+    }
+  },
+  "restricted": {
+    "native": {
+      "staging": [
+        "ProjectionExec: expr=[id@0 as id, array_concat(array_slice(arr@1, 1, 1), make_array(i@2), array_slice(arr@1, 2, 3)) as value]",
+        "  DataSourceExec: partitions=1, partition_sizes=[123]"
+      ],
+      "candidate": [
+        "ProjectionExec: expr=[id@0 as id, array_concat(array_slice(arr@1, 1, 1), make_array(i@2), array_slice(arr@1, 2, 3)) as value]",
+        "  DataSourceExec: partitions=1, partition_sizes=[123]"
+      ]
+    },
+    "spark-off": {
+      "staging": [
+        "ProjectionExec: expr=[#3@0 as id, #4@1 as value]",
+        "  ProjectionExec: expr=[id@0 as #3, CASE WHEN arr@1 IS NULL THEN arr@1 WHEN 1 <= CAST(array_length(arr@1) AS Int64) - 1 THEN spark_insert_bigint_at_second_position(arr@1, i@2) WHEN array_length(arr@1) = 1 THEN array_append(arr@1, i@2) WHEN array_length(arr@1) < 1 THEN array_concat(arr@1, CAST(array_repeat(NULL, 1 - CAST(array_length(arr@1) AS Int64)) AS List(Int64)), array_repeat(i@2, 1)) END as #4]",
+        "    DataSourceExec: partitions=1, partition_sizes=[123]"
+      ],
+      "candidate": [
+        "ProjectionExec: expr=[#3@0 as id, #4@1 as value]",
+        "  ProjectionExec: expr=[id@0 as #3, CASE WHEN arr@1 IS NULL THEN arr@1 WHEN spark_array_has_second_position(arr@1) THEN spark_insert_bigint_at_second_position(arr@1, i@2) WHEN array_length(arr@1) = 1 THEN array_append(arr@1, i@2) WHEN array_length(arr@1) < 1 THEN array_concat(arr@1, CAST(array_repeat(NULL, 1 - CAST(array_length(arr@1) AS Int64)) AS List(Int64)), array_repeat(i@2, 1)) END as #4]",
+        "    DataSourceExec: partitions=1, partition_sizes=[123]"
+      ]
+    },
+    "spark-on": {
+      "staging": [
+        "ProjectionExec: expr=[#3@0 as id, #4@1 as value]",
+        "  ProjectionExec: expr=[id@0 as #3, CASE WHEN arr@1 IS NULL THEN arr@1 WHEN 1 <= CAST(array_length(arr@1) AS Int64) - 1 THEN spark_insert_bigint_at_second_position(arr@1, i@2) WHEN array_length(arr@1) = 1 THEN array_append(arr@1, i@2) WHEN array_length(arr@1) < 1 THEN array_concat(arr@1, CAST(array_repeat(NULL, 1 - CAST(array_length(arr@1) AS Int64)) AS List(Int64)), array_repeat(i@2, 1)) END as #4]",
+        "    DataSourceExec: partitions=1, partition_sizes=[123]"
+      ],
+      "candidate": [
+        "ProjectionExec: expr=[#3@0 as id, #4@1 as value]",
+        "  ProjectionExec: expr=[id@0 as #3, CASE WHEN arr@1 IS NULL THEN arr@1 WHEN spark_array_has_second_position(arr@1) THEN spark_insert_bigint_at_second_position(arr@1, i@2) WHEN array_length(arr@1) = 1 THEN array_append(arr@1, i@2) WHEN array_length(arr@1) < 1 THEN array_concat(arr@1, CAST(array_repeat(NULL, 1 - CAST(array_length(arr@1) AS Int64)) AS List(Int64)), array_repeat(i@2, 1)) END as #4]",
+        "    DataSourceExec: partitions=1, partition_sizes=[123]"
+      ]
+    }
+  }
+}

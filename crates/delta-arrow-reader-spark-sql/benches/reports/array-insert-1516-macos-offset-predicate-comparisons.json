@@ -1,0 +1,65 @@
+{
+  "statuses": {
+    "ok": 108
+  },
+  "cells": {
+    "scalar.array.array_insert/native": {
+      "status": "ok",
+      "before": 71.9908448,
+      "after": 72.3728,
+      "delta": 0.32382293333333223,
+      "floor": 1.4270453333333322,
+      "decision": "within floor"
+    },
+    "scalar.array.array_insert/spark-off": {
+      "status": "ok",
+      "before": 75.3511552,
+      "after": 30.3971552,
+      "delta": -44.99528746666666,
+      "floor": 0.34666773333333367,
+      "decision": "faster"
+    },
+    "scalar.array.array_insert/spark-on": {
+      "status": "ok",
+      "before": 75.3991552,
+      "after": 30.386578133333334,
+      "delta": -45.00062186666666,
+      "floor": 1.8862453333333278,
+      "decision": "faster"
+    }
+  },
+  "native_gaps": {
+    "scalar.array.array_insert/spark-off": {
+      "before": {
+        "spark": 75.3511552,
+        "native": 71.9908448,
+        "gap": 3.1746229333333247,
+        "floor": 1.4270453333333322,
+        "decision": "slower"
+      },
+      "after": {
+        "spark": 30.3971552,
+        "native": 72.3728,
+        "gap": -41.946355200000006,
+        "floor": 1.4270453333333322,
+        "decision": "faster"
+      }
+    },
+    "scalar.array.array_insert/spark-on": {
+      "before": {
+        "spark": 75.3991552,
+        "native": 71.9908448,
+        "gap": 3.3703562666666613,
+        "floor": 1.4270453333333322,
+        "decision": "slower"
+      },
+      "after": {
+        "spark": 30.386578133333334,
+        "native": 72.3728,
+        "gap": -41.99888853333334,
+        "floor": 1.4270453333333322,
+        "decision": "faster"
+      }
+    }
+  }
+}

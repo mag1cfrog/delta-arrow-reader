@@ -3036,6 +3036,16 @@ and copies the suffix directly on the interior insertion branch.
 The original CASE still selects the value expression and handles
 NULL parents, empty arrays and appends.
 
+### Offset predicate for literal second-position ARRAY_INSERT (#1516)
+
+The existing direct interior path tests BIGINT List offsets for
+a length greater than one. It carries the parent validity bitmap
+into the Boolean predicate. The original CASE preserves NULL,
+empty and append branches and the evaluation of the value.
+Other argument shapes keep the original length expression.
+The [Mac profile](benches/reports/array-insert-1516-macos-profile.md)
+records the intermediate ARRAY_LENGTH cost.
+
 ### Positive scalar coordinates in SLICE (#1410)
 
 SLICE can pass positive scalar bounds to native slicing for List and
