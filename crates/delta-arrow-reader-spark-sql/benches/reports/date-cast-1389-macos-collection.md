@@ -58,6 +58,10 @@ and the first strict error. The SF1 preflight passed 15 exact
 comparisons of 6,001,215 rows, including executed SQL and Arrow
 types and cross-release source I/O. No statement was excluded.
 
+Formatting, strict root-package Clippy and the full Spark workspace
+suite passed at the candidate product commit. The remaining commits
+add its protocol and evidence.
+
 - [Exact results and release receipts](date-cast-1389-macos-collection-preflight.json)
 - [Full paired results](date-cast-1389-macos-collection-comparisons.json)
 - [Compressed raw samples](date-cast-1389-macos-collection-samples.jsonl.gz)
