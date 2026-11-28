@@ -1,0 +1,28 @@
+{
+  "source": "155c7b98c2044a22112c4b8273b8da946e3dcf1e",
+  "source_file": "vendor/sail/crates/sail-function/src/scalar/datetime/spark_timestamp.rs",
+  "probe": "macos_rounds/1389-ltz-profile.rs",
+  "probe_sha256": "792692dd9f602e7dc360f9166861e27b0bfad5b7e28051fd91c6202af7ad0921",
+  "test": "scalar::datetime::spark_timestamp::macos_ltz_attribution::attribute_ordinary_utc_timestamp",
+  "blocks": 9,
+  "max_process_seconds": 60,
+  "max_seconds": 1200,
+  "rows": 262144,
+  "phases": [
+    "spark_array",
+    "native_array",
+    "spark_localize",
+    "utc_direct",
+    "spark_fields"
+  ],
+  "comparisons": {
+    "complete_array": [
+      "spark_array",
+      "native_array"
+    ],
+    "utc_localization": [
+      "spark_localize",
+      "utc_direct"
+    ]
+  }
+}
