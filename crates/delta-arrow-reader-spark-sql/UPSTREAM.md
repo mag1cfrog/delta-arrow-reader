@@ -2479,6 +2479,19 @@ Read valid physical numeric literals without creating an empty input batch.
 Computed or invalid arguments keep the existing extraction. The single result
 uses the same quantile query and cast without building a result vector.
 
+### Exact repeat reuse for small approximate-percentile windows (#1516)
+
+The sliding Float64 scalar accumulator with physical literal
+configuration retains up to five non-NULL input values in
+their original order. A moving frame reuses a cached result
+only when its complete ordered float bits match a frame that
+was evaluated from a fresh summary. Otherwise it runs the same
+summary over the new frame. Larger untracked frames retain the
+executor's replay path. Configuration evaluation, rank rules,
+compression and typed conversion are preserved.
+The [Mac profile](benches/reports/percentile-1516-macos-profile.md)
+records the repeated summary work and the lossy state counterexample.
+
 ### Approximate percentile ranks
 
 Spark APPROX_PERCENTILE and PERCENTILE_APPROX use a local Rust adaptation of
