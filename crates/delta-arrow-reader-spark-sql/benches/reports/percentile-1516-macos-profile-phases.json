@@ -1,0 +1,375 @@
+{
+  "phase_medians": {
+    "window.window.approx_percentile/native": {
+      "status": "ok",
+      "phases": {
+        "create": {
+          "ns_per_input_row": 77.2213755,
+          "aa_floor": 8.275850000000005
+        },
+        "discard": {
+          "ns_per_input_row": 25.634215500000003,
+          "aa_floor": 0.4593889999999998
+        },
+        "replay": {
+          "ns_per_input_row": 267.2822115,
+          "aa_floor": 4.599840999999998
+        },
+        "update": {
+          "ns_per_input_row": 5.7169125,
+          "aa_floor": 0.15095100000000006
+        },
+        "retract": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "merge": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "evaluate": {
+          "ns_per_input_row": 22.5027315,
+          "aa_floor": 0.41001900000000013
+        },
+        "state": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "materialize": {
+          "ns_per_input_row": 8.3057825,
+          "aa_floor": 0.13850599999999957
+        },
+        "convert": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "summary_insert": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "summary_compress": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "summary_query": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "summary_total": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "timed_frame_work": {
+          "ns_per_input_row": 397.813264,
+          "aa_floor": 13.237738000000007
+        },
+        "frame_work_excluding_summary": {
+          "ns_per_input_row": 397.813264,
+          "aa_floor": 13.237738000000007
+        }
+      }
+    },
+    "window.window.approx_percentile/spark-off": {
+      "status": "ok",
+      "phases": {
+        "create": {
+          "ns_per_input_row": 37.924574,
+          "aa_floor": 3.7069939999999946
+        },
+        "discard": {
+          "ns_per_input_row": 32.8251535,
+          "aa_floor": 0.43316899999999947
+        },
+        "replay": {
+          "ns_per_input_row": 251.2864495,
+          "aa_floor": 1.3003704999999997
+        },
+        "update": {
+          "ns_per_input_row": 4.767291500000001,
+          "aa_floor": 0.03942650000000025
+        },
+        "retract": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "merge": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "evaluate": {
+          "ns_per_input_row": 327.7442355,
+          "aa_floor": 2.0552815000000066
+        },
+        "state": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "materialize": {
+          "ns_per_input_row": 7.8755345000000005,
+          "aa_floor": 0.09825400000000029
+        },
+        "convert": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "summary_insert": {
+          "ns_per_input_row": 53.238619,
+          "aa_floor": 0.966326500000001
+        },
+        "summary_compress": {
+          "ns_per_input_row": 110.85649,
+          "aa_floor": 1.3785249999999962
+        },
+        "summary_query": {
+          "ns_per_input_row": 17.0646685,
+          "aa_floor": 0.029059500000000682
+        },
+        "summary_total": {
+          "ns_per_input_row": 181.274936,
+          "aa_floor": 2.1752409999999998
+        },
+        "timed_frame_work": {
+          "ns_per_input_row": 653.700501,
+          "aa_floor": 5.04035250000004
+        },
+        "frame_work_excluding_summary": {
+          "ns_per_input_row": 472.32374300000004,
+          "aa_floor": 4.014154999999988
+        }
+      }
+    },
+    "window.window.approx_percentile/spark-on": {
+      "status": "ok",
+      "phases": {
+        "create": {
+          "ns_per_input_row": 35.3503405,
+          "aa_floor": 2.536329000000002
+        },
+        "discard": {
+          "ns_per_input_row": 32.907724,
+          "aa_floor": 0.3839699999999979
+        },
+        "replay": {
+          "ns_per_input_row": 251.64836,
+          "aa_floor": 1.7338934999999935
+        },
+        "update": {
+          "ns_per_input_row": 4.7710215,
+          "aa_floor": 0.03396999999999961
+        },
+        "retract": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "merge": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "evaluate": {
+          "ns_per_input_row": 328.995409,
+          "aa_floor": 2.885551499999991
+        },
+        "state": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "materialize": {
+          "ns_per_input_row": 7.897800999999999,
+          "aa_floor": 0.14442350000000026
+        },
+        "convert": {
+          "ns_per_input_row": 0.0,
+          "aa_floor": 0.0
+        },
+        "summary_insert": {
+          "ns_per_input_row": 53.253653,
+          "aa_floor": 1.163616000000001
+        },
+        "summary_compress": {
+          "ns_per_input_row": 112.139346,
+          "aa_floor": 1.4507864999999995
+        },
+        "summary_query": {
+          "ns_per_input_row": 17.0808855,
+          "aa_floor": 0.11467150000000004
+        },
+        "summary_total": {
+          "ns_per_input_row": 182.04015700000002,
+          "aa_floor": 1.8637034999999997
+        },
+        "timed_frame_work": {
+          "ns_per_input_row": 653.924848,
+          "aa_floor": 4.97859550000004
+        },
+        "frame_work_excluding_summary": {
+          "ns_per_input_row": 472.21017600000005,
+          "aa_floor": 4.260676500000017
+        }
+      }
+    }
+  },
+  "exact_counts": {
+    "native": {
+      "create": {
+        "calls": 983616,
+        "rows": 0
+      },
+      "discard": {
+        "calls": 979520,
+        "rows": 0
+      },
+      "replay": {
+        "calls": 979520,
+        "rows": 4897600
+      },
+      "update": {
+        "calls": 20480,
+        "rows": 20480
+      },
+      "retract": {
+        "calls": 0,
+        "rows": 0
+      },
+      "merge": {
+        "calls": 0,
+        "rows": 0
+      },
+      "evaluate": {
+        "calls": 1000000,
+        "rows": 0
+      },
+      "state": {
+        "calls": 0,
+        "rows": 0
+      },
+      "materialize": {
+        "calls": 4216,
+        "rows": 1000000
+      },
+      "convert": {
+        "calls": 0,
+        "rows": 0
+      },
+      "summary_insert": {
+        "calls": 0,
+        "rows": 0
+      },
+      "summary_compress": {
+        "calls": 0,
+        "rows": 0
+      },
+      "summary_query": {
+        "calls": 0,
+        "rows": 0
+      }
+    },
+    "spark-off": {
+      "create": {
+        "calls": 983616,
+        "rows": 0
+      },
+      "discard": {
+        "calls": 979520,
+        "rows": 0
+      },
+      "replay": {
+        "calls": 979520,
+        "rows": 4897600
+      },
+      "update": {
+        "calls": 20480,
+        "rows": 20480
+      },
+      "retract": {
+        "calls": 0,
+        "rows": 0
+      },
+      "merge": {
+        "calls": 0,
+        "rows": 0
+      },
+      "evaluate": {
+        "calls": 1000000,
+        "rows": 0
+      },
+      "state": {
+        "calls": 0,
+        "rows": 0
+      },
+      "materialize": {
+        "calls": 4216,
+        "rows": 1000000
+      },
+      "convert": {
+        "calls": 0,
+        "rows": 0
+      },
+      "summary_insert": {
+        "calls": 1000000,
+        "rows": 4610700
+      },
+      "summary_compress": {
+        "calls": 1000000,
+        "rows": 0
+      },
+      "summary_query": {
+        "calls": 937500,
+        "rows": 0
+      }
+    },
+    "spark-on": {
+      "create": {
+        "calls": 983616,
+        "rows": 0
+      },
+      "discard": {
+        "calls": 979520,
+        "rows": 0
+      },
+      "replay": {
+        "calls": 979520,
+        "rows": 4897600
+      },
+      "update": {
+        "calls": 20480,
+        "rows": 20480
+      },
+      "retract": {
+        "calls": 0,
+        "rows": 0
+      },
+      "merge": {
+        "calls": 0,
+        "rows": 0
+      },
+      "evaluate": {
+        "calls": 1000000,
+        "rows": 0
+      },
+      "state": {
+        "calls": 0,
+        "rows": 0
+      },
+      "materialize": {
+        "calls": 4216,
+        "rows": 1000000
+      },
+      "convert": {
+        "calls": 0,
+        "rows": 0
+      },
+      "summary_insert": {
+        "calls": 1000000,
+        "rows": 4610700
+      },
+      "summary_compress": {
+        "calls": 1000000,
+        "rows": 0
+      },
+      "summary_query": {
+        "calls": 937500,
+        "rows": 0
+      }
+    }
+  }
+}

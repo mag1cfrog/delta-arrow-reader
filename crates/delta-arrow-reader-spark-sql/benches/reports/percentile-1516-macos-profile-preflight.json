@@ -1,0 +1,151 @@
+{
+  "cases": {
+    "window.window.approx_percentile": {
+      "input_rows": 1000000,
+      "output_rows": 1000000,
+      "plan_sha256": {
+        "native.plan": "576d21880b8a24fb19615b9ee1bdcf14b37cec9c10d195ed04f4f869e8d3104c",
+        "projection-native.plan": "1ac1b332dc7c22d73b20b0881f80e6e22a48551b8147c2462429758c7954676c",
+        "projection-spark-off.plan": "bc11032a8b0a7516ffda2aa4ba27814395730689183c77bfc8ad61807866e295",
+        "projection-spark-on.plan": "bc11032a8b0a7516ffda2aa4ba27814395730689183c77bfc8ad61807866e295",
+        "spark-off.plan": "1b1fa0bf74b4fb35e76de23f2cba4cc064ffb347d53bdb923baa5ae5f0d10758",
+        "spark-on.plan": "1b1fa0bf74b4fb35e76de23f2cba4cc064ffb347d53bdb923baa5ae5f0d10758"
+      },
+      "results": [
+        {
+          "configuration": "native",
+          "rows": 1000000,
+          "source_guard_rows": 1000000,
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Float64"
+          ]
+        },
+        {
+          "comparison": {
+            "equal": true,
+            "first_difference": null,
+            "native_rows": 1000000,
+            "native_types": [
+              "Int64",
+              "Float64"
+            ],
+            "same_rows": true,
+            "same_types": true,
+            "spark_rows": 1000000,
+            "spark_types": [
+              "Int64",
+              "Float64"
+            ]
+          },
+          "configuration": "spark-off",
+          "function_evidence": {
+            "expressions": [
+              "Column { name: \"#2\", index: 2 }",
+              "Literal { value: Decimal128(Some(5),1,1), field: Field { name: \"lit\", data_type: Decimal128(1, 1) } }"
+            ],
+            "kernels": "[Aggregate(AggregateUDF { inner: ApproxPercentile { signature: Signature { type_signature: UserDefined, volatility: Immutable, parameter_names: None } } })]",
+            "unknown_window": false
+          },
+          "identical_plan_candidate": false,
+          "native_function_evidence": {
+            "expressions": [
+              "Column { name: \"d\", index: 2 }",
+              "Literal { value: Float64(0.5), field: Field { name: \"lit\", data_type: Float64 } }"
+            ],
+            "kernels": "[Aggregate(AggregateUDF { inner: ApproxPercentileCont { signature: Signature { type_signature: OneOf([Coercible([Implicit { desired_type: Float, implicit_coercion: ImplicitCoercion { allowed_source_types: [Numeric], default_casted_type: Float64 } }, Implicit { desired_type: Native(LogicalType(Native(Float64), Float64)), implicit_coercion: ImplicitCoercion { allowed_source_types: [Numeric], default_casted_type: Float64 } }]), Coercible([Implicit { desired_type: Float, implicit_coercion: ImplicitCoercion { allowed_source_types: [Numeric], default_casted_type: Float64 } }, Implicit { desired_type: Native(LogicalType(Native(Float64), Float64)), implicit_coercion: ImplicitCoercion { allowed_source_types: [Numeric], default_casted_type: Float64 } }, Implicit { desired_type: Integer, implicit_coercion: ImplicitCoercion { allowed_source_types: [Numeric], default_casted_type: Int64 } }])]), volatility: Immutable, parameter_names: None } } })]",
+            "unknown_window": false
+          },
+          "rows": 1000000,
+          "same_physical_function": false,
+          "source_guard_rows": 1000000,
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Float64"
+          ]
+        },
+        {
+          "comparison": {
+            "equal": true,
+            "first_difference": null,
+            "native_rows": 1000000,
+            "native_types": [
+              "Int64",
+              "Float64"
+            ],
+            "same_rows": true,
+            "same_types": true,
+            "spark_rows": 1000000,
+            "spark_types": [
+              "Int64",
+              "Float64"
+            ]
+          },
+          "configuration": "spark-on",
+          "function_evidence": {
+            "expressions": [
+              "Column { name: \"#2\", index: 2 }",
+              "Literal { value: Decimal128(Some(5),1,1), field: Field { name: \"lit\", data_type: Decimal128(1, 1) } }"
+            ],
+            "kernels": "[Aggregate(AggregateUDF { inner: ApproxPercentile { signature: Signature { type_signature: UserDefined, volatility: Immutable, parameter_names: None } } })]",
+            "unknown_window": false
+          },
+          "identical_plan_candidate": false,
+          "native_function_evidence": {
+            "expressions": [
+              "Column { name: \"d\", index: 2 }",
+              "Literal { value: Float64(0.5), field: Field { name: \"lit\", data_type: Float64 } }"
+            ],
+            "kernels": "[Aggregate(AggregateUDF { inner: ApproxPercentileCont { signature: Signature { type_signature: OneOf([Coercible([Implicit { desired_type: Float, implicit_coercion: ImplicitCoercion { allowed_source_types: [Numeric], default_casted_type: Float64 } }, Implicit { desired_type: Native(LogicalType(Native(Float64), Float64)), implicit_coercion: ImplicitCoercion { allowed_source_types: [Numeric], default_casted_type: Float64 } }]), Coercible([Implicit { desired_type: Float, implicit_coercion: ImplicitCoercion { allowed_source_types: [Numeric], default_casted_type: Float64 } }, Implicit { desired_type: Native(LogicalType(Native(Float64), Float64)), implicit_coercion: ImplicitCoercion { allowed_source_types: [Numeric], default_casted_type: Float64 } }, Implicit { desired_type: Integer, implicit_coercion: ImplicitCoercion { allowed_source_types: [Numeric], default_casted_type: Int64 } }])]), volatility: Immutable, parameter_names: None } } })]",
+            "unknown_window": false
+          },
+          "rows": 1000000,
+          "same_physical_function": false,
+          "source_guard_rows": 1000000,
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Float64"
+          ]
+        }
+      ],
+      "status": "eligible",
+      "types": [
+        "Int64",
+        "Float64"
+      ]
+    }
+  },
+  "protocol_sha256": "04f167c9d7a74f1eef2ff9cd89a40e94c9b0202e84477e804a7c44547f23fff1",
+  "release": {
+    "binaries": {
+      "functions": "454153624e8299749497ccd6b6c838cd919d0f794c9ccbdebe0a3c47ceda8c4e"
+    },
+    "overlays": {
+      "benches/functions.rs": "1b98476d367418c618323be3196038b25551841eee25fccd959156e9ec8fd16e",
+      "tests/support/spark_results.rs": "379a0466303bd64c5dc1a40d5baaeb5a5913f15fafec5bc813553168868cd633",
+      "vendor/dependencies/datafusion-physical-expr/src/aggregate.rs": "f7fd95598177956a9149926def4c07633947a85e9a898ff833295fbb8e28973c",
+      "vendor/dependencies/datafusion-physical-expr/src/expressions/cast.rs": "f1fa991e44fecf5f58405b0278e36a8bc9aff6095d2358dc1ba8edfc33fe27b8",
+      "vendor/dependencies/datafusion-physical-expr/src/scalar_function.rs": "e6d919b177769b98630e59378236579ee9bdbe22e52d894fa32000446b4fff80",
+      "vendor/dependencies/datafusion-physical-expr/src/window/sliding_aggregate.rs": "d934f5122d987f38d8eb184a80fc9da7f13087ef261a4b4711cf469f322d81f9",
+      "vendor/dependencies/datafusion-physical-expr/src/window/standard.rs": "f3dbce29361f4780b750b4023090934f16789755976c137a48fb7469ad945c41",
+      "vendor/dependencies/datafusion-physical-expr/src/window/window_expr.rs": "e06580fb3f0ed4dd0b58ddb95fb7511a888db78cacb8f68974e567157c036632",
+      "vendor/dependencies/datafusion-physical-plan/src/aggregates/mod.rs": "110853fd246f3fae7096f5bcfcb242b944feb499124bc2ace4488880027f1448",
+      "vendor/dependencies/datafusion-physical-plan/src/aggregates/no_grouping.rs": "6425e8498b9376bd165ac30e0fdeee4fdb11317716e1740e8b618a4ca1a948e8",
+      "vendor/sail/crates/sail-function/src/aggregate/approx_percentile.rs": "e260b429c8659c531592b9451aff9c2e412335708d4b089c8b3d7bbfd456d9e6"
+    },
+    "profile": "release",
+    "profile_adapter_sha256": "10691c39b0bd682aecc6d7a4342cac2ba06ca495ff2bb1abcb528c7562ac3a5c",
+    "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+    "restricted_adapter_sha256": "a135e44e1152e924aa8196dbbcba2c5304871ba18f2dcce17418cb46dac498f3",
+    "rustc": "1.96.0",
+    "source": "8c72feac9667ed6d09735a1a9ad2216480d3c320"
+  },
+  "uninstrumented_and_profile_row_sha256": {
+    "native": "2d1d269ea21e789a450b5cb5923cf0a0c8890ac5a5f37e31d82bc884dd6f4709",
+    "spark-off": "2d1d269ea21e789a450b5cb5923cf0a0c8890ac5a5f37e31d82bc884dd6f4709",
+    "spark-on": "2d1d269ea21e789a450b5cb5923cf0a0c8890ac5a5f37e31d82bc884dd6f4709"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "source": "8c72feac9667ed6d09735a1a9ad2216480d3c320",
+  "case_ids": [
+    "window.window.approx_percentile"
+  ],
+  "manifest_sha256": "f9116c6ce9385847ef368ca41125fc85d1e0f2fbbca976e7b461a86ebbbcf160",
+  "instrument_sha256": "38215f9a009c3507c1f39e24552d11f7de499e858c206ca747fa68b03727634b",
+  "schedule_sha256": "e317b6fc4dcd463a155a55b32b8c9b036eaa7419176ff0ed06a2b3e7252d4102",
+  "counterexample_sha256": "f95853a59ab1063834353201b3234f85a423273efd11af540d5dcf7836b443ce",
+  "blocks": 9,
+  "samples": 9,
+  "prior_decisions": {},
+  "process_seconds": 130,
+  "max_seconds": 5400,
+  "preflight_seconds": 600,
+  "preflight_process_seconds": 300,
+  "phases": [
+    "create",
+    "discard",
+    "replay",
+    "update",
+    "retract",
+    "merge",
+    "evaluate",
+    "state",
+    "materialize",
+    "convert",
+    "summary_insert",
+    "summary_compress",
+    "summary_query"
+  ],
+  "expected_window_counts": {
+    "replay_calls": 979520,
+    "replay_rows": 4897600,
+    "initial_update_rows": 20480,
+    "summary_insert_rows": 4610700,
+    "summary_compress_calls": 1000000,
+    "summary_query_calls": 937500
+  }
+}
