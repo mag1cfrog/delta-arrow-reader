@@ -680,18 +680,24 @@ mod tests {
         }
 
         fn compare(input: &ArrayRef, frames: &[Range<usize>], accuracy: f64) -> Result<bool> {
-            let mut reference = accumulator(accuracy);
-            let mut candidate = SlidingPercentile::new(accumulator(accuracy));
+            let scalar_accumulator = || ApproxPercentileAccumulator {
+                summary: QuantileSummary::new(1.0 / accuracy),
+                percentiles: vec![0.5],
+                returns_array: false,
+                value_type: DataType::Float64,
+            };
+            let mut reference = scalar_accumulator();
+            let mut candidate = SlidingPercentile::new(scalar_accumulator());
             let mut previous = 0..0;
             let mut reused = false;
             for frame in frames {
                 let moved = frame.start != previous.start;
                 let replay = moved && !candidate.supports_retract_batch();
                 if moved {
-                    reference = accumulator(accuracy);
+                    reference = scalar_accumulator();
                 }
                 if replay {
-                    candidate = SlidingPercentile::new(accumulator(accuracy));
+                    candidate = SlidingPercentile::new(scalar_accumulator());
                 }
                 let reference_start = if moved { frame.start } else { previous.end };
                 if frame.end > reference_start {
