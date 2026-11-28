@@ -2608,6 +2608,19 @@ offsets, leap seconds and invalid inputs. The frozen DATE_FORMAT differential
 tests compare UTC and DST-zone output on supported string layouts and SQL
 inputs.
 
+### Fixed UTC formatting for STRING DATE_FORMAT (#1389)
+
+The scalar pattern `yyyy/MM/dd HH:mm` in UTC writes string-array
+results directly into Arrow's Utf8 builder after the existing
+timestamp parser. This skips the repeated zone lookup, generic
+field traversal and intermediate row strings measured in the
+[Mac profile](benches/reports/date-format-1389-macos-profile.md).
+The route preserves the same year-of-era conversion and NULLs.
+Other patterns, zones, input types and arrays whose output could
+overflow Utf8 offsets retain the existing formatter. The
+differential uses the committed timestamp inputs across all
+three supported string array layouts.
+
 ### Ordinary STRING timestamp casts (#1389)
 
 SparkTimestamp LTZ/NTZ uses Chrono calendar and clock validation directly for
