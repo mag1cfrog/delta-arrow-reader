@@ -70,12 +70,14 @@ The new focused test initially used an array-result helper to exercise
 the scalar path. Its corrected scalar fixture and five existing
 percentile tests passed. The correction at `01c17d52` is under
 `#[cfg(test)]`, which is excluded from the release. Formatting and
-strict root-package Clippy passed on the corrected test input.
+strict root-package Clippy and the full Spark workspace suite passed
+at `01c17d52`. The suite completed 249 targets with 3,332 tests passed
+and three ignored. Later commits add only benchmark evidence.
 
 The run completed 432 processes and retained 3,888 query/projection
 sample pairs across nine reversed blocks. No observation was excluded.
-The paired medians, floors and gaps below were checked against the raw
-records. The table applies only to the committed restricted input.
+The paired medians, floors and gaps were checked against the raw
+records. The tables apply to the committed restricted input.
 
 - [Exact preflight and sealed release identities](percentile-1516-macos-exact-preflight.json)
 - [Machine-readable paired comparisons](percentile-1516-macos-exact-comparisons.json)
