@@ -1,0 +1,75 @@
+{
+  "staging": "e6b4b4fd48ad0b17facdd81ed1373477f6b52035",
+  "candidate": "4472df8de59ef52f1c76d336fd9d915bd5970d95",
+  "baseline_manifest_sha256": "edec91c39ef60e9710d6d33b1b407d8b4765522bf7e95e73f73d3ed3b5e05c81",
+  "schedule_sha256": "e317b6fc4dcd463a155a55b32b8c9b036eaa7419176ff0ed06a2b3e7252d4102",
+  "fixture_proof_sha256": "5566c3ea99b3ada9817cd640d0deea31832906fccea21ac7bfaf09e68de62b87",
+  "blocks": 9,
+  "max_seconds": 3600,
+  "metric": "query_complete_ns",
+  "targets": [
+    "interval_year_month_quoted",
+    "interval_day_time"
+  ],
+  "statements": [
+    {
+      "suite": "parsers",
+      "id": "interval_day_time",
+      "configurations": [
+        "spark-off",
+        "spark-on"
+      ]
+    },
+    {
+      "suite": "parsers",
+      "id": "interval_calendar",
+      "configurations": [
+        "native",
+        "spark-off",
+        "spark-on"
+      ]
+    },
+    {
+      "suite": "parsers",
+      "id": "interval_year_month",
+      "configurations": [
+        "native",
+        "spark-off",
+        "spark-on"
+      ]
+    },
+    {
+      "suite": "parsers",
+      "id": "interval_year_month_quoted",
+      "configurations": [
+        "native",
+        "spark-off",
+        "spark-on"
+      ]
+    },
+    {
+      "suite": "parsers",
+      "id": "interval_day_time_input",
+      "configurations": [
+        "spark-off",
+        "spark-on"
+      ]
+    }
+  ],
+  "staging_report_head": "8f92fecfc4d0bbd845d87722b71407467ed4fcfc",
+  "changes_from_staging_build": [
+    "benches/macos_rounds/1389-borrowed-tokens.json",
+    "benches/macos_rounds/1389-borrowed-tokens.md",
+    "benches/macos_rounds/1389-interval-profile.json",
+    "benches/macos_rounds/1389-interval-profile.md",
+    "benches/macos_rounds/interval_profile.py",
+    "benches/macos_rounds/sf1.py",
+    "benches/reports/interval-1389-macos-borrowed-comparisons.json",
+    "benches/reports/interval-1389-macos-borrowed-preflight.json",
+    "benches/reports/interval-1389-macos-borrowed-samples.jsonl.gz",
+    "benches/reports/interval-1389-macos-borrowed.md",
+    "benches/reports/interval-1389-macos-profile-samples.jsonl.gz",
+    "benches/reports/interval-1389-macos-profile-summary.json",
+    "benches/reports/interval-1389-macos-profile.md"
+  ]
+}

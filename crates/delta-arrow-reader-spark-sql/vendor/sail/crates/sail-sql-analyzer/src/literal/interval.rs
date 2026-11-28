@@ -1,5 +1,6 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md in the host repository.
 use std::iter::once;
+use std::ops::Neg;
 use std::str::FromStr;
 
 use chrono::{self, TimeDelta};
@@ -124,6 +125,97 @@ enum MultiUnitFamilyRule {
     NonZeroValues,
 }
 
+#[derive(Clone, Copy)]
+enum UnitKind {
+    Year,
+    Month,
+    Week,
+    Day,
+    Hour,
+    Minute,
+    Second,
+    Millisecond,
+    Microsecond,
+}
+
+impl UnitKind {
+    fn from_ast(unit: &IntervalUnit) -> Self {
+        match unit {
+            IntervalUnit::Year(_) | IntervalUnit::Years(_) => Self::Year,
+            IntervalUnit::Month(_) | IntervalUnit::Months(_) => Self::Month,
+            IntervalUnit::Week(_) | IntervalUnit::Weeks(_) => Self::Week,
+            IntervalUnit::Day(_) | IntervalUnit::Days(_) => Self::Day,
+            IntervalUnit::Hour(_) | IntervalUnit::Hours(_) => Self::Hour,
+            IntervalUnit::Minute(_) | IntervalUnit::Minutes(_) => Self::Minute,
+            IntervalUnit::Second(_) | IntervalUnit::Seconds(_) => Self::Second,
+            IntervalUnit::Millisecond(_) | IntervalUnit::Milliseconds(_) => Self::Millisecond,
+            IntervalUnit::Microsecond(_) | IntervalUnit::Microseconds(_) => Self::Microsecond,
+        }
+    }
+
+    fn from_text(unit: &str) -> Option<Self> {
+        let base = unit.strip_suffix(['s', 'S']).unwrap_or(unit);
+        [
+            ("year", Self::Year),
+            ("month", Self::Month),
+            ("week", Self::Week),
+            ("day", Self::Day),
+            ("hour", Self::Hour),
+            ("minute", Self::Minute),
+            ("second", Self::Second),
+            ("millisecond", Self::Millisecond),
+            ("microsecond", Self::Microsecond),
+        ]
+        .into_iter()
+        .find_map(|(name, kind)| base.eq_ignore_ascii_case(name).then_some(kind))
+    }
+
+    fn field(self) -> spec::IntervalFieldType {
+        use spec::IntervalFieldType::{Day, Hour, Minute, Month, Second, Year};
+        match self {
+            Self::Year => Year,
+            Self::Month => Month,
+            Self::Week | Self::Day => Day,
+            Self::Hour => Hour,
+            Self::Minute => Minute,
+            Self::Second | Self::Millisecond | Self::Microsecond => Second,
+        }
+    }
+
+    fn standard(self) -> Option<StandardIntervalKind> {
+        Some(match self {
+            Self::Year => StandardIntervalKind::Year,
+            Self::Month => StandardIntervalKind::Month,
+            Self::Day => StandardIntervalKind::Day,
+            Self::Hour => StandardIntervalKind::Hour,
+            Self::Minute => StandardIntervalKind::Minute,
+            Self::Second => StandardIntervalKind::Second,
+            Self::Week | Self::Millisecond | Self::Microsecond => return None,
+        })
+    }
+}
+
+enum UnitAmount<'a> {
+    Expression(Expr),
+    Text(&'a str),
+}
+
+impl UnitAmount<'_> {
+    fn parse<T: FromStr + Neg<Output = T>>(self) -> SqlResult<T> {
+        match self {
+            Self::Expression(value) => parse_signed_value(value),
+            Self::Text(text) => {
+                // The expression path parses the unsigned magnitude before applying minus.
+                let digits = text.strip_prefix('-').unwrap_or(text);
+                let value: T = digits
+                    .parse()
+                    .map_err(|_| SqlError::invalid(format!("literal: {text}")))?;
+                Ok(if text.starts_with('-') { -value } else { value })
+            }
+        }
+    }
+}
+
 /// Converts a Spark SQL interval literal, choosing a multi-unit family by its written units.
 pub fn from_ast_signed_interval(value: Signed<IntervalExpr>) -> SqlResult<IntervalValue> {
     from_ast_signed_interval_with_rule(value, MultiUnitFamilyRule::WrittenUnits)
@@ -142,43 +234,16 @@ fn from_ast_signed_interval_with_rule(
             from_ast_standard_interval(value, kind, negated)
         }
         IntervalExpr::MultiUnit { head, tail } => {
-            if tail.is_empty() {
-                match head.unit {
-                    IntervalUnit::Year(_) | IntervalUnit::Years(_) => {
-                        from_ast_standard_interval(head.value, StandardIntervalKind::Year, negated)
-                    }
-                    IntervalUnit::Month(_) | IntervalUnit::Months(_) => {
-                        from_ast_standard_interval(head.value, StandardIntervalKind::Month, negated)
-                    }
-                    IntervalUnit::Day(_) | IntervalUnit::Days(_) => {
-                        from_ast_standard_interval(head.value, StandardIntervalKind::Day, negated)
-                    }
-                    IntervalUnit::Hour(_) | IntervalUnit::Hours(_) => {
-                        from_ast_standard_interval(head.value, StandardIntervalKind::Hour, negated)
-                    }
-                    IntervalUnit::Minute(_) | IntervalUnit::Minutes(_) => {
-                        from_ast_standard_interval(
-                            head.value,
-                            StandardIntervalKind::Minute,
-                            negated,
-                        )
-                    }
-                    IntervalUnit::Second(_) | IntervalUnit::Seconds(_) => {
-                        from_ast_standard_interval(
-                            head.value,
-                            StandardIntervalKind::Second,
-                            negated,
-                        )
-                    }
-                    _ => from_ast_multi_unit_interval(vec![head], negated, rule),
-                }
-            } else {
-                let values = once(head).chain(tail).collect();
-                from_ast_multi_unit_interval(values, negated, rule)
+            if tail.is_empty()
+                && let Some(kind) = UnitKind::from_ast(&head.unit).standard()
+            {
+                return from_ast_standard_interval(head.value, kind, negated);
             }
+            let values = once(head).chain(tail).collect();
+            from_ast_multi_unit_interval(values, negated, rule)
         }
         IntervalExpr::Literal(value) => {
-            // shortcut: decoded quoted text has a shorter lifetime; retain its scoped parser until measured otherwise.
+            // Decoded text remains scoped to this conversion.
             parse_interval_string(&from_ast_string(value)?, negated, rule)
         }
     }
@@ -343,6 +408,14 @@ fn from_ast_standard_interval(
     let signed: Signed<String> = parse_signed_value(value)?;
     let negated = signed.is_negative() ^ negated;
     let value = signed.into_inner();
+    parse_standard_interval_text(&value, kind, negated)
+}
+
+fn parse_standard_interval_text(
+    value: &str,
+    kind: StandardIntervalKind,
+    negated: bool,
+) -> SqlResult<IntervalValue> {
     use spec::IntervalFieldType::{Day, Hour, Minute, Month, Second, Year};
     let (regex, start_field, end_field): (&Regex, _, _) = match kind {
         StandardIntervalKind::Year => (&INTERVAL_YEAR_REGEX, Year, Year),
@@ -360,9 +433,9 @@ fn from_ast_standard_interval(
         StandardIntervalKind::Second => (&INTERVAL_SECOND_REGEX, Second, Second),
     };
     if start_field <= Month {
-        parse_interval_year_month_string(&value, negated, regex, start_field, end_field)
+        parse_interval_year_month_string(value, negated, regex, start_field, end_field)
     } else {
-        parse_interval_day_time_string(&value, negated, regex, start_field, end_field)
+        parse_interval_day_time_string(value, negated, regex, start_field, end_field)
     }
 }
 
@@ -371,168 +444,235 @@ fn from_ast_multi_unit_interval(
     negated: bool,
     rule: MultiUnitFamilyRule,
 ) -> SqlResult<IntervalValue> {
-    use spec::IntervalFieldType::{Day, Hour, Minute, Month, Second, Year};
-    let error = || SqlError::invalid("multi-unit interval");
-    let mut months = 0i32;
-    let mut delta = TimeDelta::zero();
-    // The first and last written field of each family, if any unit of that family was written.
-    let mut year_month_fields: Option<(spec::IntervalFieldType, spec::IntervalFieldType)> = None;
-    let mut day_time_fields: Option<(spec::IntervalFieldType, spec::IntervalFieldType)> = None;
-    for value in values {
-        let IntervalValueWithUnit { value, unit } = value;
-        let field = match &unit {
-            IntervalUnit::Year(_) | IntervalUnit::Years(_) => Year,
-            IntervalUnit::Month(_) | IntervalUnit::Months(_) => Month,
-            IntervalUnit::Week(_)
-            | IntervalUnit::Weeks(_)
-            | IntervalUnit::Day(_)
-            | IntervalUnit::Days(_) => Day,
-            IntervalUnit::Hour(_) | IntervalUnit::Hours(_) => Hour,
-            IntervalUnit::Minute(_) | IntervalUnit::Minutes(_) => Minute,
-            IntervalUnit::Second(_)
-            | IntervalUnit::Seconds(_)
-            | IntervalUnit::Millisecond(_)
-            | IntervalUnit::Milliseconds(_)
-            | IntervalUnit::Microsecond(_)
-            | IntervalUnit::Microseconds(_) => Second,
-        };
-        let family_fields = if field <= Month {
-            &mut year_month_fields
+    let mut parts = MultiUnitInterval::default();
+    for IntervalValueWithUnit { value, unit } in values {
+        parts.add(UnitKind::from_ast(&unit), UnitAmount::Expression(value))?;
+    }
+    parts.finish(negated, rule)
+}
+
+#[derive(Default)]
+struct MultiUnitInterval {
+    months: i32,
+    delta: TimeDelta,
+    // The first and last written field of each family.
+    year_month_fields: Option<(spec::IntervalFieldType, spec::IntervalFieldType)>,
+    day_time_fields: Option<(spec::IntervalFieldType, spec::IntervalFieldType)>,
+}
+
+impl MultiUnitInterval {
+    fn add(&mut self, unit: UnitKind, amount: UnitAmount<'_>) -> SqlResult<()> {
+        let field = unit.field();
+        let fields = if field <= spec::IntervalFieldType::Month {
+            &mut self.year_month_fields
         } else {
-            &mut day_time_fields
+            &mut self.day_time_fields
         };
-        *family_fields = Some(match *family_fields {
+        *fields = Some(match *fields {
             Some((start, end)) => (start.min(field), end.max(field)),
             None => (field, field),
         });
-
+        let error = || SqlError::invalid("multi-unit interval");
         match unit {
-            IntervalUnit::Year(_) | IntervalUnit::Years(_) => {
-                let value: i32 = parse_signed_value(value)?;
-                let m = value.checked_mul(12).ok_or_else(error)?;
-                months = months.checked_add(m).ok_or_else(error)?;
+            UnitKind::Year => {
+                let value: i32 = amount.parse()?;
+                let months = value.checked_mul(12).ok_or_else(error)?;
+                self.months = self.months.checked_add(months).ok_or_else(error)?;
             }
-            IntervalUnit::Month(_) | IntervalUnit::Months(_) => {
-                let value: i32 = parse_signed_value(value)?;
-                months = months.checked_add(value).ok_or_else(error)?;
+            UnitKind::Month => {
+                self.months = self.months.checked_add(amount.parse()?).ok_or_else(error)?;
             }
-            IntervalUnit::Week(_) | IntervalUnit::Weeks(_) => {
-                let value: i64 = parse_signed_value(value)?;
-                let weeks = TimeDelta::try_weeks(value).ok_or_else(error)?;
-                delta = delta.checked_add(&weeks).ok_or_else(error)?;
+            UnitKind::Week => {
+                let weeks = TimeDelta::try_weeks(amount.parse()?).ok_or_else(error)?;
+                self.delta = self.delta.checked_add(&weeks).ok_or_else(error)?;
             }
-            IntervalUnit::Day(_) | IntervalUnit::Days(_) => {
-                let value: i64 = parse_signed_value(value)?;
-                let days = TimeDelta::try_days(value).ok_or_else(error)?;
-                delta = delta.checked_add(&days).ok_or_else(error)?;
+            UnitKind::Day => {
+                let days = TimeDelta::try_days(amount.parse()?).ok_or_else(error)?;
+                self.delta = self.delta.checked_add(&days).ok_or_else(error)?;
             }
-            IntervalUnit::Hour(_) | IntervalUnit::Hours(_) => {
-                let value: i64 = parse_signed_value(value)?;
-                let hours = TimeDelta::try_hours(value).ok_or_else(error)?;
-                delta = delta.checked_add(&hours).ok_or_else(error)?;
+            UnitKind::Hour => {
+                let hours = TimeDelta::try_hours(amount.parse()?).ok_or_else(error)?;
+                self.delta = self.delta.checked_add(&hours).ok_or_else(error)?;
             }
-            IntervalUnit::Minute(_) | IntervalUnit::Minutes(_) => {
-                let value: i64 = parse_signed_value(value)?;
-                let minutes = TimeDelta::try_minutes(value).ok_or_else(error)?;
-                delta = delta.checked_add(&minutes).ok_or_else(error)?;
+            UnitKind::Minute => {
+                let minutes = TimeDelta::try_minutes(amount.parse()?).ok_or_else(error)?;
+                self.delta = self.delta.checked_add(&minutes).ok_or_else(error)?;
             }
-            IntervalUnit::Second(_) | IntervalUnit::Seconds(_) => {
-                let value: Signed<DecimalSecond> = parse_signed_value(value)?;
+            UnitKind::Second => {
+                let value: Signed<DecimalSecond> = amount.parse()?;
                 let negated = value.is_negative();
                 let value = value.into_inner();
                 let seconds = TimeDelta::seconds(value.seconds as i64);
                 let microseconds = TimeDelta::microseconds(value.microseconds as i64);
                 if negated {
-                    delta = delta.checked_sub(&seconds).ok_or_else(error)?;
-                    delta = delta.checked_sub(&microseconds).ok_or_else(error)?;
+                    self.delta = self.delta.checked_sub(&seconds).ok_or_else(error)?;
+                    self.delta = self.delta.checked_sub(&microseconds).ok_or_else(error)?;
                 } else {
-                    delta = delta.checked_add(&seconds).ok_or_else(error)?;
-                    delta = delta.checked_add(&microseconds).ok_or_else(error)?;
+                    self.delta = self.delta.checked_add(&seconds).ok_or_else(error)?;
+                    self.delta = self.delta.checked_add(&microseconds).ok_or_else(error)?;
                 }
             }
-            IntervalUnit::Millisecond(_) | IntervalUnit::Milliseconds(_) => {
-                let value: i64 = parse_signed_value(value)?;
-                let milliseconds = TimeDelta::try_milliseconds(value).ok_or_else(error)?;
-                delta = delta.checked_add(&milliseconds).ok_or_else(error)?;
+            UnitKind::Millisecond => {
+                let milliseconds =
+                    TimeDelta::try_milliseconds(amount.parse()?).ok_or_else(error)?;
+                self.delta = self.delta.checked_add(&milliseconds).ok_or_else(error)?;
             }
-            IntervalUnit::Microsecond(_) | IntervalUnit::Microseconds(_) => {
-                let value: i64 = parse_signed_value(value)?;
-                let microseconds = TimeDelta::microseconds(value);
-                delta = delta.checked_add(&microseconds).ok_or_else(error)?;
+            UnitKind::Microsecond => {
+                let microseconds = TimeDelta::microseconds(amount.parse()?);
+                self.delta = self.delta.checked_add(&microseconds).ok_or_else(error)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn finish(self, negated: bool, rule: MultiUnitFamilyRule) -> SqlResult<IntervalValue> {
+        use spec::IntervalFieldType::{Day, Second};
+        let Self {
+            months,
+            delta,
+            year_month_fields,
+            day_time_fields,
+        } = self;
+        let error = || SqlError::invalid("multi-unit interval");
+        let (is_year_month, is_day_time) = match rule {
+            // Unit presence preserves the family even when values are zero or cancel.
+            MultiUnitFamilyRule::WrittenUnits => {
+                (year_month_fields.is_some(), day_time_fields.is_some())
+            }
+            MultiUnitFamilyRule::NonZeroValues => (months != 0, delta != TimeDelta::zero()),
+        };
+        match (is_year_month, is_day_time) {
+            (true, false) => {
+                let n = if negated {
+                    months.checked_mul(-1).ok_or_else(error)?
+                } else {
+                    months
+                };
+                // Both rules report a year-month interval only when a year or month unit was written.
+                let (start_field, end_field) = year_month_fields.ok_or_else(error)?;
+                Ok(IntervalValue::YearMonth {
+                    months: n,
+                    start_field,
+                    end_field,
+                })
+            }
+            (true, true) => {
+                let days = delta.num_days();
+                let remainder = delta - chrono::Duration::days(days);
+                let microseconds = remainder.num_microseconds().ok_or_else(error)?;
+
+                let months = if negated {
+                    months.checked_mul(-1).ok_or_else(error)?
+                } else {
+                    months
+                };
+                let days = if negated {
+                    days.checked_mul(-1).ok_or_else(error)?
+                } else {
+                    days
+                };
+                let days = i32::try_from(days).map_err(|_| {
+                    SqlError::invalid(format!("Days value out of range for i32: {days}"))
+                })?;
+                let microseconds = if negated {
+                    microseconds.checked_mul(-1).ok_or_else(error)?
+                } else {
+                    microseconds
+                };
+                let nanoseconds = microseconds * 1_000;
+
+                Ok(IntervalValue::MonthDayNanosecond {
+                    months,
+                    days,
+                    nanoseconds,
+                })
+            }
+            (false, _) => {
+                let microseconds = delta.num_microseconds().ok_or_else(error)?;
+                let n = if negated {
+                    microseconds.checked_mul(-1).ok_or_else(error)?
+                } else {
+                    microseconds
+                };
+                // With non-zero values deciding, only zero year-month units may have been
+                // written, as in `'0 years 0 months'`. That zero day-time value covers the full
+                // day-time range.
+                let (start_field, end_field) = day_time_fields.unwrap_or((Day, Second));
+                Ok(IntervalValue::Microsecond {
+                    microseconds: n,
+                    start_field,
+                    end_field,
+                })
             }
         }
     }
-    let (is_year_month, is_day_time) = match rule {
-        // Unit presence preserves the family even when values are zero or cancel.
-        MultiUnitFamilyRule::WrittenUnits => {
-            (year_month_fields.is_some(), day_time_fields.is_some())
-        }
-        MultiUnitFamilyRule::NonZeroValues => (months != 0, delta != TimeDelta::zero()),
+}
+
+fn interval_space(c: char) -> bool {
+    matches!(c, ' ' | '\t' | '\r' | '\n')
+}
+
+/// Try a plain numeric unit string or an unescaped quoted string in a cast batch.
+pub(crate) fn parse_batch_interval(s: &str) -> Option<SqlResult<IntervalValue>> {
+    let text = s.trim_matches(interval_space);
+    if let Some(decoded) = text
+        .strip_prefix('\'')
+        .and_then(|text| text.strip_suffix('\''))
+        && decoded.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric()
+                || b"-.".contains(&byte)
+                || interval_space(char::from(byte))
+        })
+    {
+        return Some(parse_interval_string(
+            decoded,
+            false,
+            MultiUnitFamilyRule::NonZeroValues,
+        ));
+    }
+    parse_numeric_unit_interval(text).map(Ok)
+}
+
+/// Parse complete unqualified numeric unit strings without constructing syntax nodes.
+/// Rejections leave validation and diagnostics to the existing parser.
+fn parse_numeric_unit_interval(s: &str) -> Option<IntervalValue> {
+    fn digits(s: &str) -> bool {
+        !s.is_empty() && s.bytes().all(|byte| byte.is_ascii_digit())
+    }
+
+    fn amount(s: &str) -> Option<&str> {
+        let magnitude = s.strip_prefix('-').unwrap_or(s);
+        let valid = match magnitude.split_once('.') {
+            Some((whole, fraction)) => digits(whole) && digits(fraction),
+            None => digits(magnitude),
+        };
+        valid.then_some(s)
+    }
+
+    let mut terms = s
+        .split(interval_space)
+        .filter(|term| !term.is_empty())
+        .peekable();
+    let first = terms.next()?;
+    let first = if first.eq_ignore_ascii_case("interval") {
+        terms.next()?
+    } else {
+        first
     };
-    match (is_year_month, is_day_time) {
-        (true, false) => {
-            let n = if negated {
-                months.checked_mul(-1).ok_or_else(error)?
-            } else {
-                months
-            };
-            // Both rules report a year-month interval only when a year or month unit was written.
-            let (start_field, end_field) = year_month_fields.ok_or_else(error)?;
-            Ok(IntervalValue::YearMonth {
-                months: n,
-                start_field,
-                end_field,
-            })
-        }
-        (true, true) => {
-            let days = delta.num_days();
-            let remainder = delta - chrono::Duration::days(days);
-            let microseconds = remainder.num_microseconds().ok_or_else(error)?;
-
-            let months = if negated {
-                months.checked_mul(-1).ok_or_else(error)?
-            } else {
-                months
-            };
-            let days = if negated {
-                days.checked_mul(-1).ok_or_else(error)?
-            } else {
-                days
-            };
-            let days = i32::try_from(days).map_err(|_| {
-                SqlError::invalid(format!("Days value out of range for i32: {days}"))
-            })?;
-            let microseconds = if negated {
-                microseconds.checked_mul(-1).ok_or_else(error)?
-            } else {
-                microseconds
-            };
-            let nanoseconds = microseconds * 1_000;
-
-            Ok(IntervalValue::MonthDayNanosecond {
-                months,
-                days,
-                nanoseconds,
-            })
-        }
-        (false, _) => {
-            let microseconds = delta.num_microseconds().ok_or_else(error)?;
-            let n = if negated {
-                microseconds.checked_mul(-1).ok_or_else(error)?
-            } else {
-                microseconds
-            };
-            // With non-zero values deciding, only zero year-month units may have been
-            // written, as in `'0 years 0 months'`. That zero day-time value covers the full
-            // day-time range.
-            let (start_field, end_field) = day_time_fields.unwrap_or((Day, Second));
-            Ok(IntervalValue::Microsecond {
-                microseconds: n,
-                start_field,
-                end_field,
-            })
-        }
+    let first = amount(first)?;
+    let unit = UnitKind::from_text(terms.next()?)?;
+    if terms.peek().is_none()
+        && let Some(kind) = unit.standard()
+    {
+        return parse_standard_interval_text(first, kind, false).ok();
     }
+    let mut parts = MultiUnitInterval::default();
+    parts.add(unit, UnitAmount::Text(first)).ok()?;
+    while let Some(text) = terms.next() {
+        let unit = UnitKind::from_text(terms.next()?)?;
+        parts.add(unit, UnitAmount::Text(amount(text)?)).ok()?;
+    }
+    parts.finish(false, MultiUnitFamilyRule::NonZeroValues).ok()
 }
 
 /// Parses an interval string converted at run time, such as a string cast or a `window`
@@ -556,6 +696,15 @@ fn parse_interval_string(
     negated: bool,
     rule: MultiUnitFamilyRule,
 ) -> SqlResult<IntervalValue> {
+    // Count each decoded string scope, including the direct path within that scope.
+    #[cfg(test)]
+    crate::parser::INTERVAL_LITERAL_CALLS.with(|calls| calls.set(calls.get() + 1));
+    if !negated
+        && matches!(rule, MultiUnitFamilyRule::NonZeroValues)
+        && let Some(value) = parse_numeric_unit_interval(s)
+    {
+        return Ok(value);
+    }
     let IntervalLiteral {
         interval: _,
         value: interval,

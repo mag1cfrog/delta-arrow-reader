@@ -25,12 +25,13 @@ use crate::literal::datetime::{
     create_timestamp_parser,
 };
 use crate::literal::interval::{
-    IntervalValue, from_ast_unqualified_interval, parse_unqualified_interval_string,
+    IntervalValue, from_ast_unqualified_interval, parse_batch_interval,
+    parse_unqualified_interval_string,
 };
 
 #[cfg(test)]
 thread_local! {
-    static INTERVAL_LITERAL_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(crate) static INTERVAL_LITERAL_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static INTERVAL_RICH_LEXER_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static STATEMENT_RICH_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
@@ -190,8 +191,6 @@ pub fn parse_object_name(s: &str) -> SqlResult<ObjectName> {
 }
 
 pub(crate) fn parse_interval_literal(s: &str) -> SqlResult<IntervalLiteral> {
-    #[cfg(test)]
-    INTERVAL_LITERAL_CALLS.with(|calls| calls.set(calls.get() + 1));
     let options = ParserOptions::default();
     let lexer_without_diagnostics = create_lexer::<_, Err<EmptyErr>>(&options);
     let tokens = match lexer_without_diagnostics.parse(s).into_result() {
@@ -253,8 +252,13 @@ pub fn timestamp_parser<'a>() -> impl FnMut(&'a str) -> SqlResult<TimestampValue
     }
 }
 
-/// Reuse an interval lexer and parser for rows borrowing the same batch.
+/// Parse interval strings from a batch and reuse the fallback lexer and grammar.
 pub fn interval_parser<'a>() -> impl FnMut(&'a str) -> SqlResult<IntervalValue> {
+    let mut parse = general_interval_parser();
+    move |s| parse_batch_interval(s).unwrap_or_else(|| parse(s))
+}
+
+fn general_interval_parser<'a>() -> impl FnMut(&'a str) -> SqlResult<IntervalValue> {
     static OPTIONS: LazyLock<ParserOptions> = LazyLock::new(ParserOptions::default);
     let options = &*OPTIONS;
     let mut lexer_without_diagnostics = None;
@@ -457,6 +461,84 @@ mod tests {
         }
         for sql in invalid {
             assert_equivalent(sql, sql, false);
+        }
+    }
+
+    #[test]
+    fn direct_interval_rows_match_the_general_parser() {
+        #[allow(dead_code)]
+        mod frozen {
+            include!("../tests/fixtures/string-parser-1389-inputs.rs");
+        }
+        let mut inputs: Vec<String> = frozen::INTERVALS
+            .iter()
+            .map(|text| (*text).to_owned())
+            .collect();
+        inputs.extend(
+            [
+                "\t -2 MONTHS\n",
+                "- 2 months",
+                "1 month +2 days",
+                "interval 1 month -2 days 0.000001 seconds",
+                "' 1 month -2 days 0.000000999 seconds '",
+                "0 months",
+                "-0 months",
+                "-2147483648 months",
+                "-2147483649 months",
+                "2147483647 months 1 month",
+                "-2147483648 months 1 day",
+                "2147483647 months -2147483647 months 0 days",
+                "178956970 years 7 months",
+                "178956970 years 8 months",
+                "106751991 days 4 hours 54 seconds 775807 microseconds",
+                "106751991 days 4 hours 54 seconds 775808 microseconds",
+                "9223372036854775807 microseconds",
+                "9223372036854775808 microseconds",
+                "9223372036854775807 microseconds 1 microsecond",
+                "-9223372036854775808 microseconds 0 days",
+                "1 millisecond 999 microseconds",
+                "1.123456789 seconds 2 minutes",
+                "1. seconds",
+                ".5 seconds",
+                "1 day 2",
+                "1 day 2 o'clock",
+                "'1 month 2 days",
+                "1 month\0",
+                "1 month\u{a0}2 days",
+                "'1\\nmonth'",
+            ]
+            .into_iter()
+            .map(str::to_owned),
+        );
+        let workload_start = inputs.len();
+        for line in 1..=7 {
+            inputs.extend([
+                format!("{line} months"),
+                format!("{line} days 2 hours"),
+                format!("{line} months 1 day 2 seconds"),
+                format!("'{line} months'"),
+            ]);
+        }
+        let mut before = super::general_interval_parser();
+        let mut after = super::interval_parser();
+        for text in &inputs {
+            let expected = before(text);
+            let actual = after(text);
+            assert_eq!(format!("{actual:?}"), format!("{expected:?}"), "{text:?}");
+        }
+        for text in &inputs[workload_start..] {
+            assert!(
+                super::parse_batch_interval(text).is_some_and(|value| value.is_ok()),
+                "{text:?}"
+            );
+        }
+        for text in [
+            "(2) days",
+            "2 months -- tail\n",
+            "'2-3' YEAR TO MONTH",
+            "1 day 2",
+        ] {
+            assert!(super::parse_batch_interval(text).is_none(), "{text:?}");
         }
     }
 
