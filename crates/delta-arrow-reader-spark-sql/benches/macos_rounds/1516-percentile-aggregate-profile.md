@@ -32,9 +32,11 @@ attribution check.
 
 Take the median within each process and report the balanced
 two-arm median and the A/A floor. Sum the nonoverlapping
-aggregate phases within each record before taking medians. Use
-the aligned native and Spark process medians to judge which
-outer phase exceeds the same-session A/A floors. Sort is nested
+aggregate phases within each record before taking medians. For each outer phase and subtotal, take the median of the paired
+Spark-minus-native process medians across both arms and all nine
+blocks. Compare it with the larger of the Spark and native A/A
+floors for that phase. A positive gap above that floor identifies
+a measured source of the instrumented gap. Sort is nested
 in the buffer flush. Flush and compression can overlap each
 other and the outer phases. Report their cost separately.
 A cost within its floor is not resolvable on Apple Silicon.
