@@ -2594,6 +2594,18 @@ The DATE differential tests compare valid dates, NULL handling and malformed
 inputs against the original parser. The connected tests exercise both ANSI
 modes and CAST and TRY_CAST.
 
+### Direct numeric STRING DATE fields (#1389)
+
+For a complete four-digit ASCII year with a one- or two-digit
+month and day, the Spark DATE conversion validates digits while
+extracting the fields. It uses Chrono for the calendar check
+and Arrow for the Date32 day conversion. The original path
+handles all other strings, including invalid dates and malformed
+forms. The [Mac profile](benches/reports/date-cast-1389-macos-profile.md)
+measured the repeated guarded dispatch. The differential checks
+both field widths and calendar boundaries against Arrow and
+retains the existing parser, error and NULL fixture checks.
+
 ### Whole-second strings in DATE_FORMAT (#1389, second round)
 
 DATE_FORMAT reuses the existing whole-second timestamp parser for complete
