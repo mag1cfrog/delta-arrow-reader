@@ -1,0 +1,522 @@
+{
+  "phases": {
+    "native": {
+      "create": {
+        "ns_per_input_row": 4.2e-05,
+        "aa_floor": 2.1e-05
+      },
+      "discard": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "replay": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "update": {
+        "ns_per_input_row": 0.6798740000000001,
+        "aa_floor": 0.02858299999999997
+      },
+      "retract": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "merge": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "evaluate": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 2.1e-05
+      },
+      "state": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "materialize": {
+        "ns_per_input_row": 8.3e-05,
+        "aa_floor": 4.999999999999986e-07
+      },
+      "convert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_insert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_compress": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_query": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "try_float_update": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      }
+    },
+    "spark-off": {
+      "create": {
+        "ns_per_input_row": 8.3e-05,
+        "aa_floor": 4.1e-05
+      },
+      "discard": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "replay": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "update": {
+        "ns_per_input_row": 1.3834149999999998,
+        "aa_floor": 0.02785649999999995
+      },
+      "retract": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "merge": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "evaluate": {
+        "ns_per_input_row": 4.1e-05,
+        "aa_floor": 2.1e-05
+      },
+      "state": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "materialize": {
+        "ns_per_input_row": 0.000125,
+        "aa_floor": 4.2e-05
+      },
+      "convert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_insert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_compress": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_query": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "try_float_update": {
+        "ns_per_input_row": 1.377523,
+        "aa_floor": 0.027894000000000085
+      }
+    },
+    "spark-on": {
+      "create": {
+        "ns_per_input_row": 8.3e-05,
+        "aa_floor": 2.05e-05
+      },
+      "discard": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "replay": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "update": {
+        "ns_per_input_row": 1.3832915,
+        "aa_floor": 0.01170799999999994
+      },
+      "retract": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "merge": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "evaluate": {
+        "ns_per_input_row": 4.1e-05,
+        "aa_floor": 2.1e-05
+      },
+      "state": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "materialize": {
+        "ns_per_input_row": 0.000125,
+        "aa_floor": 2.1000000000000002e-05
+      },
+      "convert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_insert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_compress": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_query": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "try_float_update": {
+        "ns_per_input_row": 1.3777545,
+        "aa_floor": 0.011792000000000025
+      }
+    }
+  },
+  "gaps": {
+    "spark-off": {
+      "update": {
+        "gap": 0.703394,
+        "floor": 0.02858299999999997,
+        "above_floor": true
+      },
+      "merge": {
+        "gap": 0.0,
+        "floor": 0.0,
+        "above_floor": false
+      },
+      "state": {
+        "gap": 0.0,
+        "floor": 0.0,
+        "above_floor": false
+      },
+      "evaluate": {
+        "gap": 2.1e-05,
+        "floor": 2.1e-05,
+        "above_floor": false
+      }
+    },
+    "spark-on": {
+      "update": {
+        "gap": 0.7032535,
+        "floor": 0.02858299999999997,
+        "above_floor": true
+      },
+      "merge": {
+        "gap": 0.0,
+        "floor": 0.0,
+        "above_floor": false
+      },
+      "state": {
+        "gap": 0.0,
+        "floor": 0.0,
+        "above_floor": false
+      },
+      "evaluate": {
+        "gap": 4.1e-05,
+        "floor": 2.1e-05,
+        "above_floor": true
+      }
+    }
+  },
+  "counts": {
+    "native": {
+      "create": [
+        [
+          1,
+          0
+        ]
+      ],
+      "discard": [
+        [
+          0,
+          0
+        ]
+      ],
+      "replay": [
+        [
+          0,
+          0
+        ]
+      ],
+      "update": [
+        [
+          123,
+          1000000
+        ]
+      ],
+      "retract": [
+        [
+          0,
+          0
+        ]
+      ],
+      "merge": [
+        [
+          0,
+          0
+        ]
+      ],
+      "evaluate": [
+        [
+          1,
+          0
+        ]
+      ],
+      "state": [
+        [
+          0,
+          0
+        ]
+      ],
+      "materialize": [
+        [
+          1,
+          1
+        ]
+      ],
+      "convert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_insert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_compress": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_query": [
+        [
+          0,
+          0
+        ]
+      ],
+      "try_float_update": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    "spark-off": {
+      "create": [
+        [
+          1,
+          0
+        ]
+      ],
+      "discard": [
+        [
+          0,
+          0
+        ]
+      ],
+      "replay": [
+        [
+          0,
+          0
+        ]
+      ],
+      "update": [
+        [
+          123,
+          1000000
+        ]
+      ],
+      "retract": [
+        [
+          0,
+          0
+        ]
+      ],
+      "merge": [
+        [
+          0,
+          0
+        ]
+      ],
+      "evaluate": [
+        [
+          1,
+          0
+        ]
+      ],
+      "state": [
+        [
+          0,
+          0
+        ]
+      ],
+      "materialize": [
+        [
+          1,
+          1
+        ]
+      ],
+      "convert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_insert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_compress": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_query": [
+        [
+          0,
+          0
+        ]
+      ],
+      "try_float_update": [
+        [
+          123,
+          937500
+        ]
+      ]
+    },
+    "spark-on": {
+      "create": [
+        [
+          1,
+          0
+        ]
+      ],
+      "discard": [
+        [
+          0,
+          0
+        ]
+      ],
+      "replay": [
+        [
+          0,
+          0
+        ]
+      ],
+      "update": [
+        [
+          123,
+          1000000
+        ]
+      ],
+      "retract": [
+        [
+          0,
+          0
+        ]
+      ],
+      "merge": [
+        [
+          0,
+          0
+        ]
+      ],
+      "evaluate": [
+        [
+          1,
+          0
+        ]
+      ],
+      "state": [
+        [
+          0,
+          0
+        ]
+      ],
+      "materialize": [
+        [
+          1,
+          1
+        ]
+      ],
+      "convert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_insert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_compress": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_query": [
+        [
+          0,
+          0
+        ]
+      ],
+      "try_float_update": [
+        [
+          123,
+          937500
+        ]
+      ]
+    }
+  },
+  "processes": 54,
+  "samples": 486,
+  "uninstrumented_arm64": [
+    {
+      "role": "Spark",
+      "method": "__ZN121_$LT$sail_function..aggregate..try_avg..TryAvgAccumulator$u20$as$u20$datafusion_expr_common..accumulator..Accumulator$GT$12update_batch17h02488af3d273d40dE",
+      "instruction_sha256": "1dbc6c6db58cad8569971d2f458d5b35b8961e407b6c7284e20ffd6c64b5aec8",
+      "instructions": 779,
+      "excerpt": [
+        "ldr d2, [x9, x12, lsl #3]",
+        "tst w14, #0x1",
+        "fcsel d0, d0, d1, ne",
+        "fadd d0, d0, d2",
+        "str x15, [x8, #0x30]",
+        "str d0, [x8, #0x38]",
+        "adds x11, x11, #0x1",
+        "b.vc <L15>",
+        "b <L51>"
+      ]
+    },
+    {
+      "role": "native",
+      "method": "__ZN124_$LT$datafusion_functions_aggregate..average..AvgAccumulator$u20$as$u20$datafusion_expr_common..accumulator..Accumulator$GT$12update_batch17h99dd75d01b3dadd1E",
+      "instruction_sha256": "355d97ca70b7cdf46588cf3b9970744dee7c6d8e40ee9fda70adc121d4e60996",
+      "instructions": 118,
+      "excerpt": [
+        "ldr x10, [x20, #0x10]",
+        "subs x11, x1, x9",
+        "add x10, x11, x10",
+        "str x10, [x20, #0x10]",
+        "b.eq <L11>",
+        "ldr x0, [x21, #0x20]",
+        "cbz x9, <L1>",
+        "bl <__ZN11arrow_arith9aggregate24aggregate_nullable_lanes17he42e4f7700bf01d2E>",
+        "b <L8>"
+      ]
+    }
+  ]
+}
