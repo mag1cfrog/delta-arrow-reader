@@ -1,0 +1,239 @@
+{
+  "statuses": {
+    "ok": 432
+  },
+  "cells": {
+    "aggregate.aggregate.approx_percentile/native": {
+      "status": "ok",
+      "before": 3.621374,
+      "after": 3.609625,
+      "delta": -0.009624000000000077,
+      "floor": 0.03164599999999984,
+      "decision": "within floor"
+    },
+    "aggregate.aggregate.approx_percentile/spark-off": {
+      "status": "ok",
+      "before": 8.348792,
+      "after": 7.701333,
+      "delta": -0.6575420000000003,
+      "floor": 0.27902049999999967,
+      "decision": "faster"
+    },
+    "aggregate.aggregate.approx_percentile/spark-on": {
+      "status": "ok",
+      "before": 8.361917,
+      "after": 7.681375,
+      "delta": -0.6974170000000006,
+      "floor": 0.38572850000000036,
+      "decision": "faster"
+    },
+    "aggregate.aggregate.percentile_approx/native": {
+      "status": "ok",
+      "before": 3.606958,
+      "after": 3.615375,
+      "delta": -0.004042000000000101,
+      "floor": 0.051124999999999865,
+      "decision": "within floor"
+    },
+    "aggregate.aggregate.percentile_approx/spark-off": {
+      "status": "ok",
+      "before": 8.360083,
+      "after": 7.698458,
+      "delta": -0.6619589999999995,
+      "floor": 0.3577079999999997,
+      "decision": "faster"
+    },
+    "aggregate.aggregate.percentile_approx/spark-on": {
+      "status": "ok",
+      "before": 8.391958,
+      "after": 7.690208,
+      "delta": -0.6838750000000005,
+      "floor": 0.5140205,
+      "decision": "faster"
+    },
+    "window.window.percentile_approx/native": {
+      "status": "ok",
+      "before": 493.572249,
+      "after": 498.472042,
+      "delta": 2.648458000000005,
+      "floor": 5.501312000000013,
+      "decision": "within floor"
+    },
+    "window.window.percentile_approx/spark-off": {
+      "status": "ok",
+      "before": 371.920166,
+      "after": 372.533709,
+      "delta": 0.8263760000000389,
+      "floor": 1.824542000000008,
+      "decision": "within floor"
+    },
+    "window.window.percentile_approx/spark-on": {
+      "status": "ok",
+      "before": 371.886334,
+      "after": 373.444042,
+      "delta": 1.940540999999996,
+      "floor": 2.249770500000011,
+      "decision": "within floor"
+    },
+    "window.window.approx_percentile/native": {
+      "status": "ok",
+      "before": 493.956042,
+      "after": 500.613541,
+      "delta": 6.480542000000014,
+      "floor": 4.632458499999984,
+      "decision": "slower"
+    },
+    "window.window.approx_percentile/spark-off": {
+      "status": "ok",
+      "before": 372.481,
+      "after": 373.48775,
+      "delta": 1.29445800000002,
+      "floor": 2.7600009999999884,
+      "decision": "within floor"
+    },
+    "window.window.approx_percentile/spark-on": {
+      "status": "ok",
+      "before": 371.723959,
+      "after": 373.291584,
+      "delta": 1.706249000000014,
+      "floor": 2.051958500000012,
+      "decision": "within floor"
+    }
+  },
+  "native_gaps": {
+    "aggregate.aggregate.approx_percentile/spark-off": {
+      "before": {
+        "spark": 8.348792,
+        "native": 3.621374,
+        "gap": 4.733667,
+        "floor": 0.03164599999999984,
+        "decision": "slower"
+      },
+      "after": {
+        "spark": 7.701333,
+        "native": 3.609625,
+        "gap": 4.095582,
+        "floor": 0.03164599999999984,
+        "decision": "slower"
+      }
+    },
+    "aggregate.aggregate.approx_percentile/spark-on": {
+      "before": {
+        "spark": 8.361917,
+        "native": 3.621374,
+        "gap": 4.756375,
+        "floor": 0.03164599999999984,
+        "decision": "slower"
+      },
+      "after": {
+        "spark": 7.681375,
+        "native": 3.609625,
+        "gap": 4.086667,
+        "floor": 0.03164599999999984,
+        "decision": "slower"
+      }
+    },
+    "aggregate.aggregate.percentile_approx/spark-off": {
+      "before": {
+        "spark": 8.360083,
+        "native": 3.606958,
+        "gap": 4.753124999999999,
+        "floor": 0.051124999999999865,
+        "decision": "slower"
+      },
+      "after": {
+        "spark": 7.698458,
+        "native": 3.615375,
+        "gap": 4.0792079999999995,
+        "floor": 0.051124999999999865,
+        "decision": "slower"
+      }
+    },
+    "aggregate.aggregate.percentile_approx/spark-on": {
+      "before": {
+        "spark": 8.391958,
+        "native": 3.606958,
+        "gap": 4.760083000000001,
+        "floor": 0.051124999999999865,
+        "decision": "slower"
+      },
+      "after": {
+        "spark": 7.690208,
+        "native": 3.615375,
+        "gap": 4.076793,
+        "floor": 0.051124999999999865,
+        "decision": "slower"
+      }
+    },
+    "window.window.percentile_approx/spark-off": {
+      "before": {
+        "spark": 371.920166,
+        "native": 493.572249,
+        "gap": -122.00479100000001,
+        "floor": 5.501312000000013,
+        "decision": "faster"
+      },
+      "after": {
+        "spark": 372.533709,
+        "native": 498.472042,
+        "gap": -124.49503999999996,
+        "floor": 5.501312000000013,
+        "decision": "faster"
+      }
+    },
+    "window.window.percentile_approx/spark-on": {
+      "before": {
+        "spark": 371.886334,
+        "native": 493.572249,
+        "gap": -123.10691500000001,
+        "floor": 5.501312000000013,
+        "decision": "faster"
+      },
+      "after": {
+        "spark": 373.444042,
+        "native": 498.472042,
+        "gap": -125.73754200000002,
+        "floor": 5.501312000000013,
+        "decision": "faster"
+      }
+    },
+    "window.window.approx_percentile/spark-off": {
+      "before": {
+        "spark": 372.481,
+        "native": 493.956042,
+        "gap": -121.47504200000003,
+        "floor": 4.632458499999984,
+        "decision": "faster"
+      },
+      "after": {
+        "spark": 373.48775,
+        "native": 500.613541,
+        "gap": -126.83808299999998,
+        "floor": 4.632458499999984,
+        "decision": "faster"
+      }
+    },
+    "window.window.approx_percentile/spark-on": {
+      "before": {
+        "spark": 371.723959,
+        "native": 493.956042,
+        "gap": -121.612167,
+        "floor": 4.632458499999984,
+        "decision": "faster"
+      },
+      "after": {
+        "spark": 373.291584,
+        "native": 500.613541,
+        "gap": -129.01241600000003,
+        "floor": 4.632458499999984,
+        "decision": "faster"
+      }
+    }
+  },
+  "control_judgments": {
+    "window.window.approx_percentile/native": {
+      "decision": "build-layout shift",
+      "comparison": "percentile-1516-macos-in-place-compression-native-layout.json"
+    }
+  }
+}
