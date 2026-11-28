@@ -24,7 +24,7 @@ def overlay(workspace, targets):
     expr = workspace / "vendor/dependencies/datafusion-physical-expr/src"
     case = expr / "expressions/case.rs"
     scalar = expr / "scalar_function.rs"
-    retained = ("Cargo.toml", "benches/functions.rs", "tests/support/spark_results.rs")
+    retained = ("benches/functions.rs", "tests/support/spark_results.rs")
     paths = {workspace / name: instrumented[workspace / name] for name in retained}
     paths[expr / "aggregate.rs"] = instrumented[expr / "aggregate.rs"]
     replace = profile.frozen.mac_build.replace
