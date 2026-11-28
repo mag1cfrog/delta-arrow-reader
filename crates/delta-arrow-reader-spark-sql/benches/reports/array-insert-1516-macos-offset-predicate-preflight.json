@@ -1,0 +1,164 @@
+{
+  "protocol_sha256": "fbb81c44b7a1769a77b4727ef74e164b644559d049ccec9fdce010c267704a3c",
+  "releases": {
+    "staging": {
+      "source": "4fd00e7750242475649b4f2e6df9c12aa0b45939",
+      "profile": "release",
+      "rustc": "1.96.0",
+      "binaries": {
+        "functions": "55e569dd28ec9d6129ce32e395d3282856672ce20a01cc52201a0e9dfea78881"
+      },
+      "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+      "overlays": {
+        "benches/functions.rs": "9dc8e5b50c45c7373a40077bf276cee8d82621a933c835bdfe1a0f4b644db051",
+        "tests/support/spark_results.rs": "379a0466303bd64c5dc1a40d5baaeb5a5913f15fafec5bc813553168868cd633"
+      },
+      "adapter_sha256": "a135e44e1152e924aa8196dbbcba2c5304871ba18f2dcce17418cb46dac498f3",
+      "manifest_sha256": "f9116c6ce9385847ef368ca41125fc85d1e0f2fbbca976e7b461a86ebbbcf160"
+    },
+    "candidate": {
+      "source": "8ad75c1f73ab94891cbfac3f147b1637b77c4035",
+      "profile": "release",
+      "rustc": "1.96.0",
+      "binaries": {
+        "functions": "6d8a0d2921f902136821e19270aae937f4c085eae8268d2b15e74b16bcc9777f"
+      },
+      "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+      "overlays": {
+        "benches/functions.rs": "9dc8e5b50c45c7373a40077bf276cee8d82621a933c835bdfe1a0f4b644db051",
+        "tests/support/spark_results.rs": "379a0466303bd64c5dc1a40d5baaeb5a5913f15fafec5bc813553168868cd633"
+      },
+      "adapter_sha256": "a135e44e1152e924aa8196dbbcba2c5304871ba18f2dcce17418cb46dac498f3",
+      "manifest_sha256": "f9116c6ce9385847ef368ca41125fc85d1e0f2fbbca976e7b461a86ebbbcf160"
+    }
+  },
+  "observations": {
+    "scalar.array.array_insert": {
+      "full": {
+        "staging": {
+          "input_rows": 1000000,
+          "output_rows": 1000000,
+          "modes": {
+            "native": {
+              "types": [
+                "Int64",
+                "List(Field { data_type: Int64, nullable: true })"
+              ],
+              "rows_sha256": "1d6c1af97ad69a7a2f1067ada807aeedd7610e2cf15a521bdff3a2d32fb6cc94",
+              "plan_sha256": "100daced2d7e5793193b725974c7425208dbb681322132965703af0400c1e2f8"
+            },
+            "spark-off": {
+              "types": [
+                "Int64",
+                "List(Field { data_type: Int64, nullable: true })"
+              ],
+              "rows_sha256": "a58f7856e5ecec97e201d6be31f60e1c59b80d8322bc7929c424fa9495f2b6dd",
+              "plan_sha256": "7d893a29f573ed7dc1d33e5c7ce77e1c6413a832f427b8f28c6ad58d73fc0fea"
+            },
+            "spark-on": {
+              "types": [
+                "Int64",
+                "List(Field { data_type: Int64, nullable: true })"
+              ],
+              "rows_sha256": "a58f7856e5ecec97e201d6be31f60e1c59b80d8322bc7929c424fa9495f2b6dd",
+              "plan_sha256": "7d893a29f573ed7dc1d33e5c7ce77e1c6413a832f427b8f28c6ad58d73fc0fea"
+            }
+          }
+        },
+        "candidate": {
+          "input_rows": 1000000,
+          "output_rows": 1000000,
+          "modes": {
+            "native": {
+              "types": [
+                "Int64",
+                "List(Field { data_type: Int64, nullable: true })"
+              ],
+              "rows_sha256": "1d6c1af97ad69a7a2f1067ada807aeedd7610e2cf15a521bdff3a2d32fb6cc94",
+              "plan_sha256": "100daced2d7e5793193b725974c7425208dbb681322132965703af0400c1e2f8"
+            },
+            "spark-off": {
+              "types": [
+                "Int64",
+                "List(Field { data_type: Int64, nullable: true })"
+              ],
+              "rows_sha256": "a58f7856e5ecec97e201d6be31f60e1c59b80d8322bc7929c424fa9495f2b6dd",
+              "plan_sha256": "b76668675fcefea8d8f749b3ec3e8c89868b42ea80a0f4dc6d1db688486d5a8a"
+            },
+            "spark-on": {
+              "types": [
+                "Int64",
+                "List(Field { data_type: Int64, nullable: true })"
+              ],
+              "rows_sha256": "a58f7856e5ecec97e201d6be31f60e1c59b80d8322bc7929c424fa9495f2b6dd",
+              "plan_sha256": "b76668675fcefea8d8f749b3ec3e8c89868b42ea80a0f4dc6d1db688486d5a8a"
+            }
+          }
+        }
+      },
+      "restricted": {
+        "staging": {
+          "input_rows": 937500,
+          "output_rows": 937500,
+          "modes": {
+            "native": {
+              "types": [
+                "Int64",
+                "List(Field { data_type: Int64, nullable: true })"
+              ],
+              "rows_sha256": "5d412ec47f26245e00a56cfdd2448295d5fd3a6451dd5383f440290bb209225f",
+              "plan_sha256": "220cfed658c9b442d71e9c9c31ad41ca9397cc568f3a7613a611238cf8cb5f6f"
+            },
+            "spark-off": {
+              "types": [
+                "Int64",
+                "List(Field { data_type: Int64, nullable: true })"
+              ],
+              "rows_sha256": "5d412ec47f26245e00a56cfdd2448295d5fd3a6451dd5383f440290bb209225f",
+              "plan_sha256": "83ede5a758998a120212083cb0617ea556ad76fbe5677d106d04ab55defd31d8"
+            },
+            "spark-on": {
+              "types": [
+                "Int64",
+                "List(Field { data_type: Int64, nullable: true })"
+              ],
+              "rows_sha256": "5d412ec47f26245e00a56cfdd2448295d5fd3a6451dd5383f440290bb209225f",
+              "plan_sha256": "83ede5a758998a120212083cb0617ea556ad76fbe5677d106d04ab55defd31d8"
+            }
+          }
+        },
+        "candidate": {
+          "input_rows": 937500,
+          "output_rows": 937500,
+          "modes": {
+            "native": {
+              "types": [
+                "Int64",
+                "List(Field { data_type: Int64, nullable: true })"
+              ],
+              "rows_sha256": "5d412ec47f26245e00a56cfdd2448295d5fd3a6451dd5383f440290bb209225f",
+              "plan_sha256": "220cfed658c9b442d71e9c9c31ad41ca9397cc568f3a7613a611238cf8cb5f6f"
+            },
+            "spark-off": {
+              "types": [
+                "Int64",
+                "List(Field { data_type: Int64, nullable: true })"
+              ],
+              "rows_sha256": "5d412ec47f26245e00a56cfdd2448295d5fd3a6451dd5383f440290bb209225f",
+              "plan_sha256": "1de4149ab95ca5410fa820df8a9201019e2c16860711d78fd0f5ce527df49a0e"
+            },
+            "spark-on": {
+              "types": [
+                "Int64",
+                "List(Field { data_type: Int64, nullable: true })"
+              ],
+              "rows_sha256": "5d412ec47f26245e00a56cfdd2448295d5fd3a6451dd5383f440290bb209225f",
+              "plan_sha256": "1de4149ab95ca5410fa820df8a9201019e2c16860711d78fd0f5ce527df49a0e"
+            }
+          }
+        }
+      }
+    }
+  },
+  "excluded": {}
+}
