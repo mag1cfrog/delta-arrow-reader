@@ -2473,6 +2473,16 @@ volatile nodes, so a constant RAND seed cannot make its output column constant
 or remove a required sort. Nonvolatile constant inference retains its existing
 rules.
 
+### Batch state for ordered Float64 TRY_AVG (#1516)
+
+The Float64 update checks the combined non-NULL count once per
+batch and retains the running sum locally. Additions still visit
+values in input order. Empty and all-NULL batches preserve state.
+If the combined count can overflow, the original row loop keeps
+the first overflowing row's partial state. Other input types keep
+their existing updates. The [Mac profile](benches/reports/try-avg-1516-macos-profile.md)
+records the per-value state work.
+
 ### Scalar approximate percentile preparation (#1516)
 
 Read valid physical numeric literals without creating an empty input batch.
