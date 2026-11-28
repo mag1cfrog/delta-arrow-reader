@@ -1,0 +1,603 @@
+{
+  "phases": {
+    "native": {
+      "create": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "discard": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "replay": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "update": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "retract": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "merge": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "evaluate": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "state": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "materialize": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "convert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_insert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_compress": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_query": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "case_total": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "case_predicates": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "array_length": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "insert_copy": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "native_slice": {
+        "ns_per_input_row": 33.4174224,
+        "aa_floor": 0.3681973333333346
+      },
+      "native_concat": {
+        "ns_per_input_row": 27.476887466666668,
+        "aa_floor": 0.33731199999999895
+      },
+      "case_remainder": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      }
+    },
+    "spark-off": {
+      "create": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "discard": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "replay": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "update": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "retract": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "merge": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "evaluate": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "state": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "materialize": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "convert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_insert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_compress": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_query": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "case_total": {
+        "ns_per_input_row": 75.43329066666666,
+        "aa_floor": 0.3419802666666669
+      },
+      "case_predicates": {
+        "ns_per_input_row": 45.53590346666667,
+        "aa_floor": 0.32147893333333144
+      },
+      "array_length": {
+        "ns_per_input_row": 43.8771728,
+        "aa_floor": 0.324132800000001
+      },
+      "insert_copy": {
+        "ns_per_input_row": 29.25704533333333,
+        "aa_floor": 0.272113066666666
+      },
+      "native_slice": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "native_concat": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "case_remainder": {
+        "ns_per_input_row": 0.6786821333333333,
+        "aa_floor": 0.0028021333333333454
+      }
+    },
+    "spark-on": {
+      "create": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "discard": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "replay": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "update": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "retract": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "merge": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "evaluate": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "state": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "materialize": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "convert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_insert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_compress": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_query": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "case_total": {
+        "ns_per_input_row": 75.41195306666665,
+        "aa_floor": 0.5935119999999969
+      },
+      "case_predicates": {
+        "ns_per_input_row": 45.5006656,
+        "aa_floor": 0.5086202666666679
+      },
+      "array_length": {
+        "ns_per_input_row": 43.86860266666667,
+        "aa_floor": 0.5099375999999971
+      },
+      "insert_copy": {
+        "ns_per_input_row": 29.257316266666667,
+        "aa_floor": 0.10537919999999978
+      },
+      "native_slice": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "native_concat": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "case_remainder": {
+        "ns_per_input_row": 0.6789344,
+        "aa_floor": 0.003245866666666708
+      }
+    }
+  },
+  "counts": {
+    "native": {
+      "create": [
+        [
+          0,
+          0
+        ]
+      ],
+      "discard": [
+        [
+          0,
+          0
+        ]
+      ],
+      "replay": [
+        [
+          0,
+          0
+        ]
+      ],
+      "update": [
+        [
+          0,
+          0
+        ]
+      ],
+      "retract": [
+        [
+          0,
+          0
+        ]
+      ],
+      "merge": [
+        [
+          0,
+          0
+        ]
+      ],
+      "evaluate": [
+        [
+          0,
+          0
+        ]
+      ],
+      "state": [
+        [
+          0,
+          0
+        ]
+      ],
+      "materialize": [
+        [
+          0,
+          0
+        ]
+      ],
+      "convert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_insert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_compress": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_query": [
+        [
+          0,
+          0
+        ]
+      ],
+      "case_total": [
+        [
+          0,
+          0
+        ]
+      ],
+      "case_predicates": [
+        [
+          0,
+          0
+        ]
+      ],
+      "array_length": [
+        [
+          0,
+          0
+        ]
+      ],
+      "insert_copy": [
+        [
+          0,
+          0
+        ]
+      ],
+      "native_slice": [
+        [
+          246,
+          1875000
+        ]
+      ],
+      "native_concat": [
+        [
+          123,
+          937500
+        ]
+      ]
+    },
+    "spark-off": {
+      "create": [
+        [
+          0,
+          0
+        ]
+      ],
+      "discard": [
+        [
+          0,
+          0
+        ]
+      ],
+      "replay": [
+        [
+          0,
+          0
+        ]
+      ],
+      "update": [
+        [
+          0,
+          0
+        ]
+      ],
+      "retract": [
+        [
+          0,
+          0
+        ]
+      ],
+      "merge": [
+        [
+          0,
+          0
+        ]
+      ],
+      "evaluate": [
+        [
+          0,
+          0
+        ]
+      ],
+      "state": [
+        [
+          0,
+          0
+        ]
+      ],
+      "materialize": [
+        [
+          0,
+          0
+        ]
+      ],
+      "convert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_insert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_compress": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_query": [
+        [
+          0,
+          0
+        ]
+      ],
+      "case_total": [
+        [
+          123,
+          937500
+        ]
+      ],
+      "case_predicates": [
+        [
+          246,
+          1875000
+        ]
+      ],
+      "array_length": [
+        [
+          123,
+          937500
+        ]
+      ],
+      "insert_copy": [
+        [
+          123,
+          937500
+        ]
+      ],
+      "native_slice": [
+        [
+          0,
+          0
+        ]
+      ],
+      "native_concat": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    "spark-on": {
+      "create": [
+        [
+          0,
+          0
+        ]
+      ],
+      "discard": [
+        [
+          0,
+          0
+        ]
+      ],
+      "replay": [
+        [
+          0,
+          0
+        ]
+      ],
+      "update": [
+        [
+          0,
+          0
+        ]
+      ],
+      "retract": [
+        [
+          0,
+          0
+        ]
+      ],
+      "merge": [
+        [
+          0,
+          0
+        ]
+      ],
+      "evaluate": [
+        [
+          0,
+          0
+        ]
+      ],
+      "state": [
+        [
+          0,
+          0
+        ]
+      ],
+      "materialize": [
+        [
+          0,
+          0
+        ]
+      ],
+      "convert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_insert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_compress": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_query": [
+        [
+          0,
+          0
+        ]
+      ],
+      "case_total": [
+        [
+          123,
+          937500
+        ]
+      ],
+      "case_predicates": [
+        [
+          246,
+          1875000
+        ]
+      ],
+      "array_length": [
+        [
+          123,
+          937500
+        ]
+      ],
+      "insert_copy": [
+        [
+          123,
+          937500
+        ]
+      ],
+      "native_slice": [
+        [
+          0,
+          0
+        ]
+      ],
+      "native_concat": [
+        [
+          0,
+          0
+        ]
+      ]
+    }
+  },
+  "processes": 54,
+  "samples": 486,
+  "input_rows": 937500
+}
