@@ -1,0 +1,195 @@
+{
+  "protocol_sha256": "c1fc8bc3eeb37e7b841331ba4b7d56cb7e2910a9832d55840159ad0877fcd018",
+  "release": {
+    "source": "4e9694867ddf4eeef16d80cf7b08709c87eed6ff",
+    "profile": "release",
+    "rustc": "1.96.0",
+    "binaries": {
+      "functions": "7c73401908cd2471da4ad3371fcef6b540df9a9d42fac44e25bf240f004633ec"
+    },
+    "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+    "overlays": {
+      "benches/functions.rs": "1b98476d367418c618323be3196038b25551841eee25fccd959156e9ec8fd16e",
+      "tests/support/spark_results.rs": "379a0466303bd64c5dc1a40d5baaeb5a5913f15fafec5bc813553168868cd633",
+      "vendor/dependencies/datafusion-physical-expr/src/aggregate.rs": "3dfbb17672e2d70ff842cae82474163a058d01636733fb47169e9c7d7d002a7e",
+      "vendor/dependencies/datafusion-physical-expr/src/expressions/case.rs": "3745cf25272bcd64aa91a66047fa683ca88ad86116a0f3c19ebcf03a0abad6f1",
+      "vendor/dependencies/datafusion-physical-expr/src/scalar_function.rs": "8fd878e0563771c44656942f05c0147d2f43b3a7ed5dabf9c781c41b38ae1d57"
+    },
+    "profile_adapter_sha256": "45b17c81577bdcea0117c9b99a1028d7060ba0c3b55b88fae2dc98a08a149e97",
+    "restricted_adapter_sha256": "a135e44e1152e924aa8196dbbcba2c5304871ba18f2dcce17418cb46dac498f3"
+  },
+  "cases": {
+    "scalar.array.array_insert": {
+      "status": "eligible",
+      "input_rows": 937500,
+      "output_rows": 937500,
+      "results": [
+        {
+          "configuration": "native",
+          "status": "ok",
+          "rows": 937500,
+          "types": [
+            "Int64",
+            "List(Field { data_type: Int64, nullable: true })"
+          ],
+          "source_guard_rows": 937500
+        },
+        {
+          "configuration": "spark-off",
+          "status": "ok",
+          "rows": 937500,
+          "types": [
+            "Int64",
+            "List(Field { data_type: Int64, nullable: true })"
+          ],
+          "source_guard_rows": 937500,
+          "comparison": {
+            "equal": true,
+            "same_types": true,
+            "same_rows": true,
+            "native_rows": 937500,
+            "spark_rows": 937500,
+            "native_types": [
+              "Int64",
+              "List(Field { data_type: Int64, nullable: true })"
+            ],
+            "spark_types": [
+              "Int64",
+              "List(Field { data_type: Int64, nullable: true })"
+            ],
+            "first_difference": null
+          },
+          "identical_plan_candidate": false,
+          "same_physical_function": false,
+          "function_evidence": {
+            "kernels": "[Scalar(ScalarUDF { inner: ArrayLength { signature: Signature { type_signature: OneOf([ArraySignature(Array { arguments: [Array], array_coercion: None }), ArraySignature(Array { arguments: [Array, Index], array_coercion: None })]), volatility: Immutable, parameter_names: None }, aliases: [\"list_length\"] } }), Scalar(ScalarUDF { inner: InsertBigIntAtSecondPosition { signature: Signature { type_signature: Any(2), volatility: Immutable, parameter_names: None } } }), Scalar(ScalarUDF { inner: ArrayLength { signature: Signature { type_signature: OneOf([ArraySignature(Array { arguments: [Array], array_coercion: None }), ArraySignature(Array { arguments: [Array, Index], array_coercion: None })]), volatility: Immutable, parameter_names: None }, aliases: [\"list_length\"] } }), Scalar(ScalarUDF { inner: ArrayAppend { signature: Signature { type_signature: ArraySignature(Array { arguments: [Array, Element], array_coercion: Some(FixedSizedListToList) }), volatility: Immutable, parameter_names: None }, aliases: [\"list_append\", \"array_push_back\", \"list_push_back\"] } }), Scalar(ScalarUDF { inner: ArrayLength { signature: Signature { type_signature: OneOf([ArraySignature(Array { arguments: [Array], array_coercion: None }), ArraySignature(Array { arguments: [Array, Index], array_coercion: None })]), volatility: Immutable, parameter_names: None }, aliases: [\"list_length\"] } }), Scalar(ScalarUDF { inner: ArrayConcat { signature: Signature { type_signature: UserDefined, volatility: Immutable, parameter_names: None }, aliases: [\"array_cat\", \"list_concat\", \"list_cat\"] } }), Scalar(ScalarUDF { inner: ArrayRepeat { signature: Signature { type_signature: Coercible([Exact { desired_type: Any }, Implicit { desired_type: Native(LogicalType(Native(Int64), Int64)), implicit_coercion: ImplicitCoercion { allowed_source_types: [Integer], default_casted_type: Int64 } }]), volatility: Immutable, parameter_names: None }, aliases: [\"list_repeat\"] } }), Scalar(ScalarUDF { inner: ArrayLength { signature: Signature { type_signature: OneOf([ArraySignature(Array { arguments: [Array], array_coercion: None }), ArraySignature(Array { arguments: [Array, Index], array_coercion: None })]), volatility: Immutable, parameter_names: None }, aliases: [\"list_length\"] } }), Scalar(ScalarUDF { inner: ArrayRepeat { signature: Signature { type_signature: Coercible([Exact { desired_type: Any }, Implicit { desired_type: Native(LogicalType(Native(Int64), Int64)), implicit_coercion: ImplicitCoercion { allowed_source_types: [Integer], default_casted_type: Int64 } }]), volatility: Immutable, parameter_names: None }, aliases: [\"list_repeat\"] } })]",
+            "expressions": [
+              "CaseExpr { body: CaseBody { expr: None, when_then_expr: [(IsNullExpr { arg: Column { name: \"arr\", index: 1 } }, Column { name: \"arr\", index: 1 }), (BinaryExpr { left: Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }, op: LtEq, right: BinaryExpr { left: CastExpr { expr: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 1 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, target_field: Field { name: \"\", data_type: Int64, nullable: true }, cast_options: CastOptions { safe: false, format_options: FormatOptions { safe: true, null: \"\", date_format: None, datetime_format: None, timestamp_format: None, timestamp_tz_format: None, time_format: None, duration_format: Pretty, types_info: false, quoted_strings: false, formatter_factory: None } } }, op: Minus, right: Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }, fail_on_overflow: false }, fail_on_overflow: false }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"spark_insert_bigint_at_second_position\", args: [Column { name: \"arr\", index: 1 }, Column { name: \"i\", index: 2 }], return_field: Field { name: \"spark_insert_bigint_at_second_position\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }), (BinaryExpr { left: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 1 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, op: Eq, right: Literal { value: UInt64(1), field: Field { name: \"lit\", data_type: UInt64 } }, fail_on_overflow: false }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_append\", args: [Column { name: \"arr\", index: 1 }, Column { name: \"i\", index: 2 }], return_field: Field { name: \"array_append\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }), (BinaryExpr { left: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 1 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, op: Lt, right: Literal { value: UInt64(1), field: Field { name: \"lit\", data_type: UInt64 } }, fail_on_overflow: false }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_concat\", args: [Column { name: \"arr\", index: 1 }, CastExpr { expr: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_repeat\", args: [Literal { value: NULL, field: Field { name: \"lit\", data_type: Null, nullable: true } }, BinaryExpr { left: Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }, op: Minus, right: CastExpr { expr: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 1 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, target_field: Field { name: \"\", data_type: Int64, nullable: true }, cast_options: CastOptions { safe: false, format_options: FormatOptions { safe: true, null: \"\", date_format: None, datetime_format: None, timestamp_format: None, timestamp_tz_format: None, time_format: None, duration_format: Pretty, types_info: false, quoted_strings: false, formatter_factory: None } } }, fail_on_overflow: false }], return_field: Field { name: \"array_repeat\", data_type: List(Field { data_type: Null, nullable: true }), nullable: true } }, target_field: Field { name: \"\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true }, cast_options: CastOptions { safe: false, format_options: FormatOptions { safe: true, null: \"\", date_format: None, datetime_format: None, timestamp_format: None, timestamp_tz_format: None, time_format: None, duration_format: Pretty, types_info: false, quoted_strings: false, formatter_factory: None } } }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_repeat\", args: [Column { name: \"i\", index: 2 }, Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }], return_field: Field { name: \"array_repeat\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }], return_field: Field { name: \"array_concat\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } })], else_expr: None }, eval_method: NoExpression(ProjectedCaseBody { projection: [1, 2], body: CaseBody { expr: None, when_then_expr: [(IsNullExpr { arg: Column { name: \"arr\", index: 0 } }, Column { name: \"arr\", index: 0 }), (BinaryExpr { left: Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }, op: LtEq, right: BinaryExpr { left: CastExpr { expr: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 0 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, target_field: Field { name: \"\", data_type: Int64, nullable: true }, cast_options: CastOptions { safe: false, format_options: FormatOptions { safe: true, null: \"\", date_format: None, datetime_format: None, timestamp_format: None, timestamp_tz_format: None, time_format: None, duration_format: Pretty, types_info: false, quoted_strings: false, formatter_factory: None } } }, op: Minus, right: Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }, fail_on_overflow: false }, fail_on_overflow: false }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"spark_insert_bigint_at_second_position\", args: [Column { name: \"arr\", index: 0 }, Column { name: \"i\", index: 1 }], return_field: Field { name: \"spark_insert_bigint_at_second_position\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }), (BinaryExpr { left: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 0 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, op: Eq, right: Literal { value: UInt64(1), field: Field { name: \"lit\", data_type: UInt64 } }, fail_on_overflow: false }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_append\", args: [Column { name: \"arr\", index: 0 }, Column { name: \"i\", index: 1 }], return_field: Field { name: \"array_append\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }), (BinaryExpr { left: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 0 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, op: Lt, right: Literal { value: UInt64(1), field: Field { name: \"lit\", data_type: UInt64 } }, fail_on_overflow: false }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_concat\", args: [Column { name: \"arr\", index: 0 }, CastExpr { expr: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_repeat\", args: [Literal { value: NULL, field: Field { name: \"lit\", data_type: Null, nullable: true } }, BinaryExpr { left: Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }, op: Minus, right: CastExpr { expr: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 0 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, target_field: Field { name: \"\", data_type: Int64, nullable: true }, cast_options: CastOptions { safe: false, format_options: FormatOptions { safe: true, null: \"\", date_format: None, datetime_format: None, timestamp_format: None, timestamp_tz_format: None, time_format: None, duration_format: Pretty, types_info: false, quoted_strings: false, formatter_factory: None } } }, fail_on_overflow: false }], return_field: Field { name: \"array_repeat\", data_type: List(Field { data_type: Null, nullable: true }), nullable: true } }, target_field: Field { name: \"\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true }, cast_options: CastOptions { safe: false, format_options: FormatOptions { safe: true, null: \"\", date_format: None, datetime_format: None, timestamp_format: None, timestamp_tz_format: None, time_format: None, duration_format: Pretty, types_info: false, quoted_strings: false, formatter_factory: None } } }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_repeat\", args: [Column { name: \"i\", index: 1 }, Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }], return_field: Field { name: \"array_repeat\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }], return_field: Field { name: \"array_concat\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } })], else_expr: None } }) }"
+            ],
+            "unknown_window": false
+          },
+          "native_function_evidence": {
+            "kernels": "[Scalar(ScalarUDF { inner: ArrayConcat { signature: Signature { type_signature: UserDefined, volatility: Immutable, parameter_names: None }, aliases: [\"array_cat\", \"list_concat\", \"list_cat\"] } }), Scalar(ScalarUDF { inner: ArraySlice { signature: Signature { type_signature: OneOf([ArraySignature(Array { arguments: [Array, Index, Index], array_coercion: Some(FixedSizedListToList) }), ArraySignature(Array { arguments: [Array, Index, Index, Index], array_coercion: Some(FixedSizedListToList) })]), volatility: Immutable, parameter_names: None }, aliases: [\"list_slice\"] } }), Scalar(ScalarUDF { inner: MakeArray { signature: Signature { type_signature: UserDefined, volatility: Immutable, parameter_names: None }, aliases: [\"make_list\"] } }), Scalar(ScalarUDF { inner: ArraySlice { signature: Signature { type_signature: OneOf([ArraySignature(Array { arguments: [Array, Index, Index], array_coercion: Some(FixedSizedListToList) }), ArraySignature(Array { arguments: [Array, Index, Index, Index], array_coercion: Some(FixedSizedListToList) })]), volatility: Immutable, parameter_names: None }, aliases: [\"list_slice\"] } })]",
+            "expressions": [
+              "ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_concat\", args: [ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_slice\", args: [Column { name: \"arr\", index: 1 }, Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }, Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }], return_field: Field { name: \"array_slice\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"make_array\", args: [Column { name: \"i\", index: 2 }], return_field: Field { name: \"make_array\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_slice\", args: [Column { name: \"arr\", index: 1 }, Literal { value: Int64(2), field: Field { name: \"lit\", data_type: Int64 } }, Literal { value: Int64(3), field: Field { name: \"lit\", data_type: Int64 } }], return_field: Field { name: \"array_slice\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }], return_field: Field { name: \"array_concat\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }"
+            ],
+            "unknown_window": false
+          }
+        },
+        {
+          "configuration": "spark-on",
+          "status": "ok",
+          "rows": 937500,
+          "types": [
+            "Int64",
+            "List(Field { data_type: Int64, nullable: true })"
+          ],
+          "source_guard_rows": 937500,
+          "comparison": {
+            "equal": true,
+            "same_types": true,
+            "same_rows": true,
+            "native_rows": 937500,
+            "spark_rows": 937500,
+            "native_types": [
+              "Int64",
+              "List(Field { data_type: Int64, nullable: true })"
+            ],
+            "spark_types": [
+              "Int64",
+              "List(Field { data_type: Int64, nullable: true })"
+            ],
+            "first_difference": null
+          },
+          "identical_plan_candidate": false,
+          "same_physical_function": false,
+          "function_evidence": {
+            "kernels": "[Scalar(ScalarUDF { inner: ArrayLength { signature: Signature { type_signature: OneOf([ArraySignature(Array { arguments: [Array], array_coercion: None }), ArraySignature(Array { arguments: [Array, Index], array_coercion: None })]), volatility: Immutable, parameter_names: None }, aliases: [\"list_length\"] } }), Scalar(ScalarUDF { inner: InsertBigIntAtSecondPosition { signature: Signature { type_signature: Any(2), volatility: Immutable, parameter_names: None } } }), Scalar(ScalarUDF { inner: ArrayLength { signature: Signature { type_signature: OneOf([ArraySignature(Array { arguments: [Array], array_coercion: None }), ArraySignature(Array { arguments: [Array, Index], array_coercion: None })]), volatility: Immutable, parameter_names: None }, aliases: [\"list_length\"] } }), Scalar(ScalarUDF { inner: ArrayAppend { signature: Signature { type_signature: ArraySignature(Array { arguments: [Array, Element], array_coercion: Some(FixedSizedListToList) }), volatility: Immutable, parameter_names: None }, aliases: [\"list_append\", \"array_push_back\", \"list_push_back\"] } }), Scalar(ScalarUDF { inner: ArrayLength { signature: Signature { type_signature: OneOf([ArraySignature(Array { arguments: [Array], array_coercion: None }), ArraySignature(Array { arguments: [Array, Index], array_coercion: None })]), volatility: Immutable, parameter_names: None }, aliases: [\"list_length\"] } }), Scalar(ScalarUDF { inner: ArrayConcat { signature: Signature { type_signature: UserDefined, volatility: Immutable, parameter_names: None }, aliases: [\"array_cat\", \"list_concat\", \"list_cat\"] } }), Scalar(ScalarUDF { inner: ArrayRepeat { signature: Signature { type_signature: Coercible([Exact { desired_type: Any }, Implicit { desired_type: Native(LogicalType(Native(Int64), Int64)), implicit_coercion: ImplicitCoercion { allowed_source_types: [Integer], default_casted_type: Int64 } }]), volatility: Immutable, parameter_names: None }, aliases: [\"list_repeat\"] } }), Scalar(ScalarUDF { inner: ArrayLength { signature: Signature { type_signature: OneOf([ArraySignature(Array { arguments: [Array], array_coercion: None }), ArraySignature(Array { arguments: [Array, Index], array_coercion: None })]), volatility: Immutable, parameter_names: None }, aliases: [\"list_length\"] } }), Scalar(ScalarUDF { inner: ArrayRepeat { signature: Signature { type_signature: Coercible([Exact { desired_type: Any }, Implicit { desired_type: Native(LogicalType(Native(Int64), Int64)), implicit_coercion: ImplicitCoercion { allowed_source_types: [Integer], default_casted_type: Int64 } }]), volatility: Immutable, parameter_names: None }, aliases: [\"list_repeat\"] } })]",
+            "expressions": [
+              "CaseExpr { body: CaseBody { expr: None, when_then_expr: [(IsNullExpr { arg: Column { name: \"arr\", index: 1 } }, Column { name: \"arr\", index: 1 }), (BinaryExpr { left: Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }, op: LtEq, right: BinaryExpr { left: CastExpr { expr: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 1 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, target_field: Field { name: \"\", data_type: Int64, nullable: true }, cast_options: CastOptions { safe: false, format_options: FormatOptions { safe: true, null: \"\", date_format: None, datetime_format: None, timestamp_format: None, timestamp_tz_format: None, time_format: None, duration_format: Pretty, types_info: false, quoted_strings: false, formatter_factory: None } } }, op: Minus, right: Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }, fail_on_overflow: false }, fail_on_overflow: false }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"spark_insert_bigint_at_second_position\", args: [Column { name: \"arr\", index: 1 }, Column { name: \"i\", index: 2 }], return_field: Field { name: \"spark_insert_bigint_at_second_position\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }), (BinaryExpr { left: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 1 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, op: Eq, right: Literal { value: UInt64(1), field: Field { name: \"lit\", data_type: UInt64 } }, fail_on_overflow: false }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_append\", args: [Column { name: \"arr\", index: 1 }, Column { name: \"i\", index: 2 }], return_field: Field { name: \"array_append\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }), (BinaryExpr { left: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 1 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, op: Lt, right: Literal { value: UInt64(1), field: Field { name: \"lit\", data_type: UInt64 } }, fail_on_overflow: false }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_concat\", args: [Column { name: \"arr\", index: 1 }, CastExpr { expr: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_repeat\", args: [Literal { value: NULL, field: Field { name: \"lit\", data_type: Null, nullable: true } }, BinaryExpr { left: Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }, op: Minus, right: CastExpr { expr: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 1 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, target_field: Field { name: \"\", data_type: Int64, nullable: true }, cast_options: CastOptions { safe: false, format_options: FormatOptions { safe: true, null: \"\", date_format: None, datetime_format: None, timestamp_format: None, timestamp_tz_format: None, time_format: None, duration_format: Pretty, types_info: false, quoted_strings: false, formatter_factory: None } } }, fail_on_overflow: false }], return_field: Field { name: \"array_repeat\", data_type: List(Field { data_type: Null, nullable: true }), nullable: true } }, target_field: Field { name: \"\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true }, cast_options: CastOptions { safe: false, format_options: FormatOptions { safe: true, null: \"\", date_format: None, datetime_format: None, timestamp_format: None, timestamp_tz_format: None, time_format: None, duration_format: Pretty, types_info: false, quoted_strings: false, formatter_factory: None } } }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_repeat\", args: [Column { name: \"i\", index: 2 }, Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }], return_field: Field { name: \"array_repeat\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }], return_field: Field { name: \"array_concat\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } })], else_expr: None }, eval_method: NoExpression(ProjectedCaseBody { projection: [1, 2], body: CaseBody { expr: None, when_then_expr: [(IsNullExpr { arg: Column { name: \"arr\", index: 0 } }, Column { name: \"arr\", index: 0 }), (BinaryExpr { left: Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }, op: LtEq, right: BinaryExpr { left: CastExpr { expr: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 0 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, target_field: Field { name: \"\", data_type: Int64, nullable: true }, cast_options: CastOptions { safe: false, format_options: FormatOptions { safe: true, null: \"\", date_format: None, datetime_format: None, timestamp_format: None, timestamp_tz_format: None, time_format: None, duration_format: Pretty, types_info: false, quoted_strings: false, formatter_factory: None } } }, op: Minus, right: Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }, fail_on_overflow: false }, fail_on_overflow: false }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"spark_insert_bigint_at_second_position\", args: [Column { name: \"arr\", index: 0 }, Column { name: \"i\", index: 1 }], return_field: Field { name: \"spark_insert_bigint_at_second_position\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }), (BinaryExpr { left: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 0 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, op: Eq, right: Literal { value: UInt64(1), field: Field { name: \"lit\", data_type: UInt64 } }, fail_on_overflow: false }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_append\", args: [Column { name: \"arr\", index: 0 }, Column { name: \"i\", index: 1 }], return_field: Field { name: \"array_append\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }), (BinaryExpr { left: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 0 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, op: Lt, right: Literal { value: UInt64(1), field: Field { name: \"lit\", data_type: UInt64 } }, fail_on_overflow: false }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_concat\", args: [Column { name: \"arr\", index: 0 }, CastExpr { expr: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_repeat\", args: [Literal { value: NULL, field: Field { name: \"lit\", data_type: Null, nullable: true } }, BinaryExpr { left: Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }, op: Minus, right: CastExpr { expr: ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_length\", args: [Column { name: \"arr\", index: 0 }], return_field: Field { name: \"array_length\", data_type: UInt64, nullable: true } }, target_field: Field { name: \"\", data_type: Int64, nullable: true }, cast_options: CastOptions { safe: false, format_options: FormatOptions { safe: true, null: \"\", date_format: None, datetime_format: None, timestamp_format: None, timestamp_tz_format: None, time_format: None, duration_format: Pretty, types_info: false, quoted_strings: false, formatter_factory: None } } }, fail_on_overflow: false }], return_field: Field { name: \"array_repeat\", data_type: List(Field { data_type: Null, nullable: true }), nullable: true } }, target_field: Field { name: \"\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true }, cast_options: CastOptions { safe: false, format_options: FormatOptions { safe: true, null: \"\", date_format: None, datetime_format: None, timestamp_format: None, timestamp_tz_format: None, time_format: None, duration_format: Pretty, types_info: false, quoted_strings: false, formatter_factory: None } } }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_repeat\", args: [Column { name: \"i\", index: 1 }, Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }], return_field: Field { name: \"array_repeat\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }], return_field: Field { name: \"array_concat\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } })], else_expr: None } }) }"
+            ],
+            "unknown_window": false
+          },
+          "native_function_evidence": {
+            "kernels": "[Scalar(ScalarUDF { inner: ArrayConcat { signature: Signature { type_signature: UserDefined, volatility: Immutable, parameter_names: None }, aliases: [\"array_cat\", \"list_concat\", \"list_cat\"] } }), Scalar(ScalarUDF { inner: ArraySlice { signature: Signature { type_signature: OneOf([ArraySignature(Array { arguments: [Array, Index, Index], array_coercion: Some(FixedSizedListToList) }), ArraySignature(Array { arguments: [Array, Index, Index, Index], array_coercion: Some(FixedSizedListToList) })]), volatility: Immutable, parameter_names: None }, aliases: [\"list_slice\"] } }), Scalar(ScalarUDF { inner: MakeArray { signature: Signature { type_signature: UserDefined, volatility: Immutable, parameter_names: None }, aliases: [\"make_list\"] } }), Scalar(ScalarUDF { inner: ArraySlice { signature: Signature { type_signature: OneOf([ArraySignature(Array { arguments: [Array, Index, Index], array_coercion: Some(FixedSizedListToList) }), ArraySignature(Array { arguments: [Array, Index, Index, Index], array_coercion: Some(FixedSizedListToList) })]), volatility: Immutable, parameter_names: None }, aliases: [\"list_slice\"] } })]",
+            "expressions": [
+              "ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_concat\", args: [ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_slice\", args: [Column { name: \"arr\", index: 1 }, Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }, Literal { value: Int64(1), field: Field { name: \"lit\", data_type: Int64 } }], return_field: Field { name: \"array_slice\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"make_array\", args: [Column { name: \"i\", index: 2 }], return_field: Field { name: \"make_array\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }, ScalarFunctionExpr { fun: \"<FUNC>\", name: \"array_slice\", args: [Column { name: \"arr\", index: 1 }, Literal { value: Int64(2), field: Field { name: \"lit\", data_type: Int64 } }, Literal { value: Int64(3), field: Field { name: \"lit\", data_type: Int64 } }], return_field: Field { name: \"array_slice\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }], return_field: Field { name: \"array_concat\", data_type: List(Field { data_type: Int64, nullable: true }), nullable: true } }"
+            ],
+            "unknown_window": false
+          }
+        }
+      ],
+      "types": [
+        "Int64",
+        "List(Field { data_type: Int64, nullable: true })"
+      ],
+      "plan_sha256": {
+        "native.plan": "220cfed658c9b442d71e9c9c31ad41ca9397cc568f3a7613a611238cf8cb5f6f",
+        "projection-native.plan": "1ac1b332dc7c22d73b20b0881f80e6e22a48551b8147c2462429758c7954676c",
+        "projection-spark-off.plan": "cd860450587570b3425fc4120edddfeba04434374062c8c6aebbdbae9cfd4371",
+        "projection-spark-on.plan": "cd860450587570b3425fc4120edddfeba04434374062c8c6aebbdbae9cfd4371",
+        "spark-off.plan": "83ede5a758998a120212083cb0617ea556ad76fbe5677d106d04ab55defd31d8",
+        "spark-on.plan": "83ede5a758998a120212083cb0617ea556ad76fbe5677d106d04ab55defd31d8"
+      }
+    }
+  },
+  "exact_uninstrumented_comparison": {
+    "release": {
+      "source": "4fd00e7750242475649b4f2e6df9c12aa0b45939",
+      "profile": "release",
+      "rustc": "1.96.0",
+      "binaries": {
+        "functions": "55e569dd28ec9d6129ce32e395d3282856672ce20a01cc52201a0e9dfea78881"
+      },
+      "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+      "overlays": {
+        "benches/functions.rs": "9dc8e5b50c45c7373a40077bf276cee8d82621a933c835bdfe1a0f4b644db051",
+        "tests/support/spark_results.rs": "379a0466303bd64c5dc1a40d5baaeb5a5913f15fafec5bc813553168868cd633"
+      },
+      "adapter_sha256": "a135e44e1152e924aa8196dbbcba2c5304871ba18f2dcce17418cb46dac498f3",
+      "manifest_sha256": "f9116c6ce9385847ef368ca41125fc85d1e0f2fbbca976e7b461a86ebbbcf160"
+    },
+    "modes": {
+      "native": {
+        "types": [
+          "Int64",
+          "List(Field { data_type: Int64, nullable: true })"
+        ],
+        "rows_sha256": "5d412ec47f26245e00a56cfdd2448295d5fd3a6451dd5383f440290bb209225f",
+        "plan_sha256": "220cfed658c9b442d71e9c9c31ad41ca9397cc568f3a7613a611238cf8cb5f6f"
+      },
+      "spark-off": {
+        "types": [
+          "Int64",
+          "List(Field { data_type: Int64, nullable: true })"
+        ],
+        "rows_sha256": "5d412ec47f26245e00a56cfdd2448295d5fd3a6451dd5383f440290bb209225f",
+        "plan_sha256": "83ede5a758998a120212083cb0617ea556ad76fbe5677d106d04ab55defd31d8"
+      },
+      "spark-on": {
+        "types": [
+          "Int64",
+          "List(Field { data_type: Int64, nullable: true })"
+        ],
+        "rows_sha256": "5d412ec47f26245e00a56cfdd2448295d5fd3a6451dd5383f440290bb209225f",
+        "plan_sha256": "83ede5a758998a120212083cb0617ea556ad76fbe5677d106d04ab55defd31d8"
+      }
+    }
+  },
+  "plans": {
+    "native": [
+      "ProjectionExec: expr=[id@0 as id, array_concat(array_slice(arr@1, 1, 1), make_array(i@2), array_slice(arr@1, 2, 3)) as value]",
+      "  DataSourceExec: partitions=1, partition_sizes=[123]"
+    ],
+    "spark-off": [
+      "ProjectionExec: expr=[#3@0 as id, #4@1 as value]",
+      "  ProjectionExec: expr=[id@0 as #3, CASE WHEN arr@1 IS NULL THEN arr@1 WHEN 1 <= CAST(array_length(arr@1) AS Int64) - 1 THEN spark_insert_bigint_at_second_position(arr@1, i@2) WHEN array_length(arr@1) = 1 THEN array_append(arr@1, i@2) WHEN array_length(arr@1) < 1 THEN array_concat(arr@1, CAST(array_repeat(NULL, 1 - CAST(array_length(arr@1) AS Int64)) AS List(Int64)), array_repeat(i@2, 1)) END as #4]",
+      "    DataSourceExec: partitions=1, partition_sizes=[123]"
+    ],
+    "spark-on": [
+      "ProjectionExec: expr=[#3@0 as id, #4@1 as value]",
+      "  ProjectionExec: expr=[id@0 as #3, CASE WHEN arr@1 IS NULL THEN arr@1 WHEN 1 <= CAST(array_length(arr@1) AS Int64) - 1 THEN spark_insert_bigint_at_second_position(arr@1, i@2) WHEN array_length(arr@1) = 1 THEN array_append(arr@1, i@2) WHEN array_length(arr@1) < 1 THEN array_concat(arr@1, CAST(array_repeat(NULL, 1 - CAST(array_length(arr@1) AS Int64)) AS List(Int64)), array_repeat(i@2, 1)) END as #4]",
+      "    DataSourceExec: partitions=1, partition_sizes=[123]"
+    ]
+  }
+}
