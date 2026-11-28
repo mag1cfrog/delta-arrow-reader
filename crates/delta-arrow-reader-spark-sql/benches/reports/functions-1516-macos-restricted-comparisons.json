@@ -1,0 +1,376 @@
+{
+  "aggregate.aggregate.approx_percentile": {
+    "status": "ok",
+    "spark-off": {
+      "before": 3.603583,
+      "after": 8.378792,
+      "delta": 4.784333,
+      "floor": 0.08187500000000014,
+      "decision": "slower"
+    },
+    "spark-on": {
+      "before": 3.603583,
+      "after": 8.374292,
+      "delta": 4.799792,
+      "floor": 0.08187500000000014,
+      "decision": "slower"
+    }
+  },
+  "aggregate.aggregate.percentile_approx": {
+    "status": "ok",
+    "spark-off": {
+      "before": 3.603833,
+      "after": 8.352792,
+      "delta": 4.736459,
+      "floor": 0.11725049999999992,
+      "decision": "slower"
+    },
+    "spark-on": {
+      "before": 3.603833,
+      "after": 8.364666,
+      "delta": 4.77271,
+      "floor": 0.11725049999999992,
+      "decision": "slower"
+    }
+  },
+  "aggregate.aggregate.regr_avgx": {
+    "status": "ok",
+    "spark-off": {
+      "before": 5.677708,
+      "after": 5.509125,
+      "delta": -0.17224899999999987,
+      "floor": 0.17758399999999996,
+      "decision": "within floor"
+    },
+    "spark-on": {
+      "before": 5.677708,
+      "after": 5.512041,
+      "delta": -0.17037600000000008,
+      "floor": 0.17758399999999996,
+      "decision": "within floor"
+    }
+  },
+  "aggregate.aggregate.regr_avgy": {
+    "status": "ok",
+    "spark-off": {
+      "before": 5.675418,
+      "after": 5.515708,
+      "delta": -0.17354199999999942,
+      "floor": 0.29629150000000015,
+      "decision": "within floor"
+    },
+    "spark-on": {
+      "before": 5.675418,
+      "after": 5.504083,
+      "delta": -0.08954199999999979,
+      "floor": 0.29629150000000015,
+      "decision": "within floor"
+    }
+  },
+  "aggregate.aggregate.regr_r2": {
+    "status": "ok",
+    "spark-off": {
+      "before": 5.80575,
+      "after": 5.510376,
+      "delta": -0.18558400000000042,
+      "floor": 0.17343750000000036,
+      "decision": "faster"
+    },
+    "spark-on": {
+      "before": 5.80575,
+      "after": 5.498583,
+      "delta": -0.30704200000000004,
+      "floor": 0.17343750000000036,
+      "decision": "faster"
+    }
+  },
+  "aggregate.aggregate.regr_sxy": {
+    "status": "ok",
+    "spark-off": {
+      "before": 5.715542,
+      "after": 5.507,
+      "delta": -0.20958400000000044,
+      "floor": 0.1627704999999997,
+      "decision": "faster"
+    },
+    "spark-on": {
+      "before": 5.715542,
+      "after": 5.499333,
+      "delta": -0.22700100000000045,
+      "floor": 0.1627704999999997,
+      "decision": "faster"
+    }
+  },
+  "aggregate.aggregate.try_avg": {
+    "status": "ok",
+    "spark-off": {
+      "before": 0.697833,
+      "after": 1.36975,
+      "delta": 0.670792,
+      "floor": 0.03447800000000001,
+      "decision": "slower"
+    },
+    "spark-on": {
+      "before": 0.697833,
+      "after": 1.369709,
+      "delta": 0.670667,
+      "floor": 0.03447800000000001,
+      "decision": "slower"
+    }
+  },
+  "scalar.array.array_append": {
+    "status": "ok",
+    "spark-off": {
+      "before": 21.711643733333332,
+      "after": 21.4764448,
+      "delta": -0.2414666666666676,
+      "floor": 0.4871557333333332,
+      "decision": "within floor"
+    },
+    "spark-on": {
+      "before": 21.711643733333332,
+      "after": 21.5128448,
+      "delta": -0.19044373333333198,
+      "floor": 0.4871557333333332,
+      "decision": "within floor"
+    }
+  },
+  "scalar.array.array_insert": {
+    "status": "ok",
+    "spark-off": {
+      "before": 72.01062186666667,
+      "after": 75.5687552,
+      "delta": 3.599199999999996,
+      "floor": 1.6327109333333283,
+      "decision": "slower"
+    },
+    "spark-on": {
+      "before": 72.01062186666667,
+      "after": 75.57657706666667,
+      "delta": 3.535956266666659,
+      "floor": 1.6327109333333283,
+      "decision": "slower"
+    }
+  },
+  "scalar.array.array_prepend": {
+    "status": "ok",
+    "spark-off": {
+      "before": 21.733911466666665,
+      "after": 21.6003552,
+      "delta": -0.06399786666666785,
+      "floor": 0.7181338666666655,
+      "decision": "within floor"
+    },
+    "spark-on": {
+      "before": 21.733911466666665,
+      "after": 21.5124,
+      "delta": -0.16342186666666692,
+      "floor": 0.7181338666666655,
+      "decision": "within floor"
+    }
+  },
+  "scalar.collection.cardinality": {
+    "status": "ok",
+    "spark-off": {
+      "before": 44.28333333333333,
+      "after": 44.2991104,
+      "delta": -0.019421866666661458,
+      "floor": 1.2836885333333363,
+      "decision": "within floor"
+    },
+    "spark-on": {
+      "before": 44.28333333333333,
+      "after": 44.22799893333333,
+      "delta": -0.041155199999998615,
+      "floor": 1.2836885333333363,
+      "decision": "within floor"
+    }
+  },
+  "scalar.collection.concat": {
+    "status": "ok",
+    "spark-off": {
+      "before": 14.212088533333333,
+      "after": 14.512,
+      "delta": -0.2375999999999987,
+      "floor": 3.2151328,
+      "decision": "within floor"
+    },
+    "spark-on": {
+      "before": 14.212088533333333,
+      "after": 15.0595104,
+      "delta": 1.2635989333333342,
+      "floor": 3.2151328,
+      "decision": "within floor"
+    }
+  },
+  "scalar.collection.size": {
+    "status": "ok",
+    "spark-off": {
+      "before": 44.4264,
+      "after": 44.1499552,
+      "delta": -0.2873333333333292,
+      "floor": 1.3548448000000022,
+      "decision": "within floor"
+    },
+    "spark-on": {
+      "before": 44.4264,
+      "after": 44.28706666666667,
+      "delta": -0.053955199999997205,
+      "floor": 1.3548448000000022,
+      "decision": "within floor"
+    }
+  },
+  "scalar.math.expm1": {
+    "status": "ok",
+    "spark-off": {
+      "before": 2.418417,
+      "after": 2.4845,
+      "delta": 0.06920899999999985,
+      "floor": 0.07104200000000005,
+      "decision": "within floor"
+    },
+    "spark-on": {
+      "before": 2.418417,
+      "after": 2.483042,
+      "delta": 0.0677080000000001,
+      "floor": 0.07104200000000005,
+      "decision": "within floor"
+    }
+  },
+  "scalar.string.base64": {
+    "status": "ok",
+    "spark-off": {
+      "before": 26.996167,
+      "after": 23.734541,
+      "delta": -3.377416,
+      "floor": 0.740354,
+      "decision": "faster"
+    },
+    "spark-on": {
+      "before": 26.996167,
+      "after": 23.81775,
+      "delta": -3.136873999999999,
+      "floor": 0.740354,
+      "decision": "faster"
+    }
+  },
+  "window.window.approx_percentile": {
+    "status": "ok",
+    "spark-off": {
+      "before": 497.729041,
+      "after": 681.420375,
+      "delta": 186.66766699999994,
+      "floor": 14.593000499999988,
+      "decision": "slower"
+    },
+    "spark-on": {
+      "before": 497.729041,
+      "after": 681.592916,
+      "delta": 183.86387499999995,
+      "floor": 14.593000499999988,
+      "decision": "slower"
+    }
+  },
+  "window.window.array_agg": {
+    "status": "ok",
+    "spark-off": {
+      "before": 739.1195552,
+      "after": 612.9291114666667,
+      "delta": -125.85648746666664,
+      "floor": 18.63706613333335,
+      "decision": "faster"
+    },
+    "spark-on": {
+      "before": 739.1195552,
+      "after": 613.2187114666667,
+      "delta": -125.09288746666664,
+      "floor": 18.63706613333335,
+      "decision": "faster"
+    }
+  },
+  "window.window.collect_list": {
+    "status": "ok",
+    "spark-off": {
+      "before": 739.2384437333334,
+      "after": 613.1942666666666,
+      "delta": -126.3947125333334,
+      "floor": 18.17804480000001,
+      "decision": "faster"
+    },
+    "spark-on": {
+      "before": 739.2384437333334,
+      "after": 613.6671562666667,
+      "delta": -127.46044373333336,
+      "floor": 18.17804480000001,
+      "decision": "faster"
+    }
+  },
+  "window.window.collect_set": {
+    "status": "ok",
+    "spark-off": {
+      "before": 941.0234218666667,
+      "after": 941.3610218666666,
+      "delta": 1.0501792000000023,
+      "floor": 30.370844266666666,
+      "decision": "within floor"
+    },
+    "spark-on": {
+      "before": 941.0234218666667,
+      "after": 940.4356448,
+      "delta": 1.5996458666667195,
+      "floor": 30.370844266666666,
+      "decision": "within floor"
+    }
+  },
+  "window.window.percentile_approx": {
+    "status": "ok",
+    "spark-off": {
+      "before": 496.929791,
+      "after": 682.787792,
+      "delta": 187.33025000000004,
+      "floor": 17.107145499999973,
+      "decision": "slower"
+    },
+    "spark-on": {
+      "before": 496.929791,
+      "after": 683.27525,
+      "delta": 188.35541700000005,
+      "floor": 17.107145499999973,
+      "decision": "slower"
+    }
+  },
+  "window.window.regr_avgx": {
+    "status": "ok",
+    "spark-off": {
+      "before": 374.761042,
+      "after": 376.359708,
+      "delta": 1.4906670000000304,
+      "floor": 2.5953329999999823,
+      "decision": "within floor"
+    },
+    "spark-on": {
+      "before": 374.761042,
+      "after": 375.966208,
+      "delta": 0.06474900000000616,
+      "floor": 2.5953329999999823,
+      "decision": "within floor"
+    }
+  },
+  "window.window.try_avg": {
+    "status": "ok",
+    "spark-off": {
+      "before": 264.776458,
+      "after": 218.188917,
+      "delta": -45.188500999999974,
+      "floor": 3.0334170000000142,
+      "decision": "faster"
+    },
+    "spark-on": {
+      "before": 264.776458,
+      "after": 218.407416,
+      "delta": -46.475250999999986,
+      "floor": 3.0334170000000142,
+      "decision": "faster"
+    }
+  }
+}
