@@ -1,0 +1,11 @@
+{
+  "functions": [
+    {
+      "id": "window.window.approx_percentile_reuse_counterexample",
+      "spark_sql": "SELECT id,approx_percentile(a,0.5,1) OVER (ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS a_value,approx_percentile(b,0.5,1) OVER (ORDER BY id ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS b_value FROM bench ORDER BY id",
+      "native_sql": null,
+      "projection_sql": "SELECT id,a,b FROM bench",
+      "restricted_input_sql": "SELECT id,CAST(CASE id WHEN 0 THEN 9 WHEN 1 THEN 0 WHEN 2 THEN 1 WHEN 3 THEN 2 WHEN 4 THEN 3 WHEN 5 THEN 4 WHEN 6 THEN 5 END AS DOUBLE) AS a,CAST(CASE id WHEN 0 THEN 9 WHEN 1 THEN 0 WHEN 2 THEN 2 WHEN 3 THEN 2 WHEN 4 THEN 2 WHEN 5 THEN 4 WHEN 6 THEN 5 END AS DOUBLE) AS b FROM bench WHERE id < 7"
+    }
+  ]
+}
