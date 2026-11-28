@@ -1,0 +1,233 @@
+{
+  "statuses": {
+    "ok": 432
+  },
+  "cells": {
+    "aggregate.aggregate.approx_percentile/native": {
+      "status": "ok",
+      "before": 3.608167,
+      "after": 3.617501,
+      "delta": 0.01399899999999965,
+      "floor": 0.32920799999999995,
+      "decision": "within floor"
+    },
+    "aggregate.aggregate.approx_percentile/spark-off": {
+      "status": "ok",
+      "before": 8.376624,
+      "after": 8.014541,
+      "delta": -0.3362499999999997,
+      "floor": 0.9009580000000001,
+      "decision": "within floor"
+    },
+    "aggregate.aggregate.approx_percentile/spark-on": {
+      "status": "ok",
+      "before": 8.387,
+      "after": 8.044875,
+      "delta": -0.3624159999999996,
+      "floor": 0.837167,
+      "decision": "within floor"
+    },
+    "aggregate.aggregate.percentile_approx/native": {
+      "status": "ok",
+      "before": 3.6335,
+      "after": 3.606583,
+      "delta": -0.02387499999999987,
+      "floor": 0.3632925,
+      "decision": "within floor"
+    },
+    "aggregate.aggregate.percentile_approx/spark-off": {
+      "status": "ok",
+      "before": 8.389042,
+      "after": 8.025083,
+      "delta": -0.35349899999999934,
+      "floor": 0.8546874999999998,
+      "decision": "within floor"
+    },
+    "aggregate.aggregate.percentile_approx/spark-on": {
+      "status": "ok",
+      "before": 8.404334,
+      "after": 8.054708,
+      "delta": -0.3446250000000006,
+      "floor": 0.9028960000000001,
+      "decision": "within floor"
+    },
+    "window.window.percentile_approx/native": {
+      "status": "ok",
+      "before": 495.630624,
+      "after": 493.918458,
+      "delta": -2.7898739999999975,
+      "floor": 46.14454200000003,
+      "decision": "within floor"
+    },
+    "window.window.percentile_approx/spark-off": {
+      "status": "ok",
+      "before": 372.737583,
+      "after": 371.856334,
+      "delta": -0.5403340000000298,
+      "floor": 19.47354199999998,
+      "decision": "within floor"
+    },
+    "window.window.percentile_approx/spark-on": {
+      "status": "ok",
+      "before": 373.003791,
+      "after": 372.871916,
+      "delta": 1.5748329999999555,
+      "floor": 21.59174950000002,
+      "decision": "within floor"
+    },
+    "window.window.approx_percentile/native": {
+      "status": "ok",
+      "before": 496.519,
+      "after": 493.439667,
+      "delta": -4.398582000000033,
+      "floor": 26.472166499999986,
+      "decision": "within floor"
+    },
+    "window.window.approx_percentile/spark-off": {
+      "status": "ok",
+      "before": 371.937834,
+      "after": 374.052834,
+      "delta": 1.1812930000000392,
+      "floor": 31.232375500000018,
+      "decision": "within floor"
+    },
+    "window.window.approx_percentile/spark-on": {
+      "status": "ok",
+      "before": 372.523,
+      "after": 372.706667,
+      "delta": -1.4445840000000203,
+      "floor": 35.66062550000001,
+      "decision": "within floor"
+    }
+  },
+  "native_gaps": {
+    "aggregate.aggregate.approx_percentile/spark-off": {
+      "before": {
+        "spark": 8.376624,
+        "native": 3.608167,
+        "gap": 4.770040999999999,
+        "floor": 0.32920799999999995,
+        "decision": "slower"
+      },
+      "after": {
+        "spark": 8.014541,
+        "native": 3.617501,
+        "gap": 4.405583,
+        "floor": 0.32920799999999995,
+        "decision": "slower"
+      }
+    },
+    "aggregate.aggregate.approx_percentile/spark-on": {
+      "before": {
+        "spark": 8.387,
+        "native": 3.608167,
+        "gap": 4.768084,
+        "floor": 0.32920799999999995,
+        "decision": "slower"
+      },
+      "after": {
+        "spark": 8.044875,
+        "native": 3.617501,
+        "gap": 4.4099580000000005,
+        "floor": 0.32920799999999995,
+        "decision": "slower"
+      }
+    },
+    "aggregate.aggregate.percentile_approx/spark-off": {
+      "before": {
+        "spark": 8.389042,
+        "native": 3.6335,
+        "gap": 4.768625,
+        "floor": 0.3632925,
+        "decision": "slower"
+      },
+      "after": {
+        "spark": 8.025083,
+        "native": 3.606583,
+        "gap": 4.42896,
+        "floor": 0.3632925,
+        "decision": "slower"
+      }
+    },
+    "aggregate.aggregate.percentile_approx/spark-on": {
+      "before": {
+        "spark": 8.404334,
+        "native": 3.6335,
+        "gap": 4.793083,
+        "floor": 0.3632925,
+        "decision": "slower"
+      },
+      "after": {
+        "spark": 8.054708,
+        "native": 3.606583,
+        "gap": 4.455958999999999,
+        "floor": 0.3632925,
+        "decision": "slower"
+      }
+    },
+    "window.window.percentile_approx/spark-off": {
+      "before": {
+        "spark": 372.737583,
+        "native": 495.630624,
+        "gap": -122.36250000000001,
+        "floor": 46.14454200000003,
+        "decision": "faster"
+      },
+      "after": {
+        "spark": 371.856334,
+        "native": 493.918458,
+        "gap": -122.114916,
+        "floor": 46.14454200000003,
+        "decision": "faster"
+      }
+    },
+    "window.window.percentile_approx/spark-on": {
+      "before": {
+        "spark": 373.003791,
+        "native": 495.630624,
+        "gap": -122.86687599999999,
+        "floor": 46.14454200000003,
+        "decision": "faster"
+      },
+      "after": {
+        "spark": 372.871916,
+        "native": 493.918458,
+        "gap": -121.657667,
+        "floor": 46.14454200000003,
+        "decision": "faster"
+      }
+    },
+    "window.window.approx_percentile/spark-off": {
+      "before": {
+        "spark": 371.937834,
+        "native": 496.519,
+        "gap": -124.42779200000001,
+        "floor": 26.472166499999986,
+        "decision": "faster"
+      },
+      "after": {
+        "spark": 374.052834,
+        "native": 493.439667,
+        "gap": -117.95441799999998,
+        "floor": 26.472166499999986,
+        "decision": "faster"
+      }
+    },
+    "window.window.approx_percentile/spark-on": {
+      "before": {
+        "spark": 372.523,
+        "native": 496.519,
+        "gap": -123.74083300000001,
+        "floor": 26.472166499999986,
+        "decision": "faster"
+      },
+      "after": {
+        "spark": 372.706667,
+        "native": 493.439667,
+        "gap": -120.35500099999996,
+        "floor": 26.472166499999986,
+        "decision": "faster"
+      }
+    }
+  }
+}
