@@ -29,6 +29,8 @@ use crate::scalar::datetime::format::{DateTimeFormat, DateTimeFormatInput, TimeZ
 use crate::scalar::datetime::local_datetime_to_ltz::cast_local_timestamp_value_to_ltz;
 use crate::scalar::datetime::spark_timestamp::parse_ascii_whole_second_timestamp;
 
+const UTC_MINUTE_PATTERN: &str = "yyyy/MM/dd HH:mm";
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkDateFormat {
     session_timezone: Arc<str>,
@@ -94,7 +96,12 @@ impl ScalarUDFImpl for SparkDateFormat {
 
                 let result: StringArray = match array.data_type() {
                     DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
-                        format_string_array_as_timestamp(&array, &self.session_timezone, &format)?
+                        format_string_array_as_timestamp(
+                            &array,
+                            &self.session_timezone,
+                            &format,
+                            format_str == UTC_MINUTE_PATTERN,
+                        )?
                     }
                     DataType::Date32 => format_date32_array(&array, &format)?,
                     DataType::Date64 => format_date64_array(&array, &format)?,
@@ -359,11 +366,45 @@ fn format_string_array_as_timestamp(
     array: &Arc<dyn datafusion::arrow::array::Array>,
     timezone: &str,
     format: &DateTimeFormat,
+    is_minute_pattern: bool,
 ) -> Result<StringArray> {
     let timestamp_array = parse_string_array_to_timestamp(array, timezone)?;
+    // A Chrono year can use six digits, making each formatted row at most 18 bytes.
+    if is_minute_pattern
+        && timezone == "UTC"
+        && timestamp_array.len() <= (i32::MAX as usize) / 18
+        && timezone.parse::<Tz>().is_ok()
+    {
+        return format_utc_minute_array(&timestamp_array);
+    }
     let tz: Arc<str> = Arc::from(timezone);
     let timestamp_array: Arc<dyn datafusion::arrow::array::Array> = Arc::new(timestamp_array);
     format_timestamp_array_microsecond(&timestamp_array, Some(&tz), format)
+}
+
+fn format_utc_minute_array(array: &TimestampMicrosecondArray) -> Result<StringArray> {
+    let value_capacity = (array.len() - array.null_count()) * 16;
+    let mut output = StringBuilder::with_capacity(array.len(), value_capacity);
+    for value in array {
+        let Some(value) = value else {
+            output.append_null();
+            continue;
+        };
+        let datetime = timestamp_to_naive_datetime(value, &TimeUnit::Microsecond)?;
+        let year = datetime.year();
+        let year_of_era = if year <= 0 { 1 - year } else { year };
+        write!(
+            output,
+            "{year_of_era:04}/{:02}/{:02} {:02}:{:02}",
+            datetime.month(),
+            datetime.day(),
+            datetime.hour(),
+            datetime.minute(),
+        )
+        .map_err(|_| exec_datafusion_err!("spark_date_format: failed to write a timestamp"))?;
+        output.append_value("");
+    }
+    Ok(output.finish())
 }
 
 fn format_timestamp_array_dynamic(
@@ -938,6 +979,35 @@ mod tests {
                 format_seconds(&invalid, true).unwrap_err().to_string(),
                 format_seconds(&invalid, false).unwrap_err().to_string(),
             );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn utc_minute_string_array_matches_the_general_formatter()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let captured: std::collections::BTreeMap<String, Vec<String>> = serde_json::from_str(
+            include_str!("../../../tests/fixtures/timestamp-cast-1389-inputs.json"),
+        )?;
+        let values = captured
+            .into_values()
+            .flatten()
+            .map(Some)
+            .chain([
+                None,
+                Some("0000-02-29 12:34:56".to_owned()),
+                Some("-0001-12-31 23:59:59.999999".to_owned()),
+                Some("+10000-01-01 00:00:00".to_owned()),
+                Some("1996-12-31 23:59:60".to_owned()),
+            ])
+            .collect::<Vec<_>>();
+        let values = StringArray::from(values);
+        let format = DateTimeFormat::for_formatting(UTC_MINUTE_PATTERN)?;
+        for input_type in [DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View] {
+            let array = datafusion::arrow::compute::cast(&values, &input_type)?;
+            let expected = format_string_array_as_timestamp(&array, "UTC", &format, false)?;
+            let actual = format_string_array_as_timestamp(&array, "UTC", &format, true)?;
+            assert_eq!(actual.to_data(), expected.to_data());
         }
         Ok(())
     }

@@ -1,0 +1,49 @@
+{
+  "process_status": {
+    "ok": 108
+  },
+  "retained": 972,
+  "excluded": {},
+  "comparisons": {
+    "parsers/date_format_string/native": {
+      "status": "ok",
+      "before": 1098222375,
+      "after": 1101116292,
+      "delta": 4501625,
+      "floor": 5580479.0,
+      "decision": "within floor"
+    },
+    "parsers/date_format_string/spark-off": {
+      "status": "ok",
+      "before": 1455641291,
+      "after": 605373166,
+      "delta": -849288833,
+      "floor": 14996083.0,
+      "decision": "faster"
+    },
+    "parsers/date_format_string/spark-on": {
+      "status": "ok",
+      "before": 1452450083,
+      "after": 605357375,
+      "delta": -848239959,
+      "floor": 14432583.5,
+      "decision": "faster"
+    }
+  },
+  "references": {
+    "parsers/date_format_string/spark-off": {
+      "reference": "parsers/date_format_string/native",
+      "before_ns": 355196625,
+      "after_ns": -496327125,
+      "floor_ns": 15470125.0,
+      "rows": 6001215
+    },
+    "parsers/date_format_string/spark-on": {
+      "reference": "parsers/date_format_string/native",
+      "before_ns": 353738249,
+      "after_ns": -494986958,
+      "floor_ns": 18197979.5,
+      "rows": 6001215
+    }
+  }
+}
