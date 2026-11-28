@@ -1,0 +1,195 @@
+{
+  "protocol_sha256": "80389a03bf8a95b1150f56a3f8c52b4adf0b2d3e14f2130e4f478fe29ebc8258",
+  "release": {
+    "source": "b172d6bed810b7d48dab7f8eb943c29910e8a6cf",
+    "profile": "release",
+    "rustc": "1.96.0",
+    "binaries": {
+      "functions": "bda6bf92c97379ac338211f82c3987bd55e932d973e309882e9ac14fb9ddd14e"
+    },
+    "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+    "overlays": {
+      "benches/functions.rs": "1b98476d367418c618323be3196038b25551841eee25fccd959156e9ec8fd16e",
+      "tests/support/spark_results.rs": "379a0466303bd64c5dc1a40d5baaeb5a5913f15fafec5bc813553168868cd633",
+      "vendor/dependencies/datafusion-physical-expr/src/aggregate.rs": "d3d29e3d009b35655d89ae22d588e34b42c18cb343b19bbb69ca71aa4fef35ba",
+      "vendor/dependencies/datafusion-physical-expr/src/window/sliding_aggregate.rs": "d934f5122d987f38d8eb184a80fc9da7f13087ef261a4b4711cf469f322d81f9",
+      "vendor/dependencies/datafusion-physical-expr/src/window/standard.rs": "f3dbce29361f4780b750b4023090934f16789755976c137a48fb7469ad945c41",
+      "vendor/dependencies/datafusion-physical-expr/src/window/window_expr.rs": "e06580fb3f0ed4dd0b58ddb95fb7511a888db78cacb8f68974e567157c036632",
+      "vendor/dependencies/datafusion-physical-expr/src/scalar_function.rs": "e6d919b177769b98630e59378236579ee9bdbe22e52d894fa32000446b4fff80",
+      "vendor/dependencies/datafusion-physical-expr/src/expressions/cast.rs": "f1fa991e44fecf5f58405b0278e36a8bc9aff6095d2358dc1ba8edfc33fe27b8",
+      "vendor/dependencies/datafusion-physical-plan/src/aggregates/no_grouping.rs": "6425e8498b9376bd165ac30e0fdeee4fdb11317716e1740e8b618a4ca1a948e8",
+      "vendor/dependencies/datafusion-physical-plan/src/aggregates/mod.rs": "110853fd246f3fae7096f5bcfcb242b944feb499124bc2ace4488880027f1448",
+      "vendor/sail/crates/sail-function/src/aggregate/try_avg.rs": "6ff184e1b523236e4f91121ae024262ded03fcde748146e120803a7862709476"
+    },
+    "profile_adapter_sha256": "3a7a2082e7448fa7fd4571fb9fbf02eef7f47e45ea735dad574d4f91e31f307f",
+    "restricted_adapter_sha256": "a135e44e1152e924aa8196dbbcba2c5304871ba18f2dcce17418cb46dac498f3"
+  },
+  "cases": {
+    "aggregate.aggregate.try_avg": {
+      "status": "eligible",
+      "input_rows": 1000000,
+      "output_rows": 1,
+      "results": [
+        {
+          "configuration": "native",
+          "status": "ok",
+          "rows": 1,
+          "types": [
+            "Float64"
+          ],
+          "source_guard_rows": 1000000
+        },
+        {
+          "configuration": "spark-off",
+          "status": "ok",
+          "rows": 1,
+          "types": [
+            "Float64"
+          ],
+          "source_guard_rows": 1000000,
+          "comparison": {
+            "equal": true,
+            "same_types": true,
+            "same_rows": true,
+            "native_rows": 1,
+            "spark_rows": 1,
+            "native_types": [
+              "Float64"
+            ],
+            "spark_types": [
+              "Float64"
+            ],
+            "first_difference": null
+          },
+          "identical_plan_candidate": false,
+          "same_physical_function": false,
+          "function_evidence": {
+            "kernels": "[Aggregate(AggregateUDF { inner: TryAvgFunction { signature: Signature { type_signature: UserDefined, volatility: Immutable, parameter_names: None } } })]",
+            "expressions": [
+              "Column { name: \"#2\", index: 0 }"
+            ],
+            "unknown_window": false
+          },
+          "native_function_evidence": {
+            "kernels": "[Aggregate(AggregateUDF { inner: Avg { signature: Signature { type_signature: OneOf([Coercible([Exact { desired_type: Decimal }]), Coercible([Exact { desired_type: Duration }]), Coercible([Implicit { desired_type: Native(LogicalType(Native(Float64), Float64)), implicit_coercion: ImplicitCoercion { allowed_source_types: [Integer, Float], default_casted_type: Float64 } }])]), volatility: Immutable, parameter_names: None }, aliases: [\"mean\"] } })]",
+            "expressions": [
+              "Column { name: \"d\", index: 0 }"
+            ],
+            "unknown_window": false
+          }
+        },
+        {
+          "configuration": "spark-on",
+          "status": "ok",
+          "rows": 1,
+          "types": [
+            "Float64"
+          ],
+          "source_guard_rows": 1000000,
+          "comparison": {
+            "equal": true,
+            "same_types": true,
+            "same_rows": true,
+            "native_rows": 1,
+            "spark_rows": 1,
+            "native_types": [
+              "Float64"
+            ],
+            "spark_types": [
+              "Float64"
+            ],
+            "first_difference": null
+          },
+          "identical_plan_candidate": false,
+          "same_physical_function": false,
+          "function_evidence": {
+            "kernels": "[Aggregate(AggregateUDF { inner: TryAvgFunction { signature: Signature { type_signature: UserDefined, volatility: Immutable, parameter_names: None } } })]",
+            "expressions": [
+              "Column { name: \"#2\", index: 0 }"
+            ],
+            "unknown_window": false
+          },
+          "native_function_evidence": {
+            "kernels": "[Aggregate(AggregateUDF { inner: Avg { signature: Signature { type_signature: OneOf([Coercible([Exact { desired_type: Decimal }]), Coercible([Exact { desired_type: Duration }]), Coercible([Implicit { desired_type: Native(LogicalType(Native(Float64), Float64)), implicit_coercion: ImplicitCoercion { allowed_source_types: [Integer, Float], default_casted_type: Float64 } }])]), volatility: Immutable, parameter_names: None }, aliases: [\"mean\"] } })]",
+            "expressions": [
+              "Column { name: \"d\", index: 0 }"
+            ],
+            "unknown_window": false
+          }
+        }
+      ],
+      "types": [
+        "Float64"
+      ],
+      "plan_sha256": {
+        "native.plan": "aad708c5f21e07f06b4a23230609a0cf347c7d3a101aabab80077d2c02cbecdf",
+        "projection-native.plan": "1ac1b332dc7c22d73b20b0881f80e6e22a48551b8147c2462429758c7954676c",
+        "projection-spark-off.plan": "b9f184ff6e3623f14d0b76713e5b9b8a40c4c1f26ee01a5e1eca2e400b8785d9",
+        "projection-spark-on.plan": "b9f184ff6e3623f14d0b76713e5b9b8a40c4c1f26ee01a5e1eca2e400b8785d9",
+        "spark-off.plan": "ab8b87b50a591ee0006f80ed468ccb4ae8f9a29e09cda2743fe00285a17b04bb",
+        "spark-on.plan": "ab8b87b50a591ee0006f80ed468ccb4ae8f9a29e09cda2743fe00285a17b04bb"
+      }
+    }
+  },
+  "exact_uninstrumented_comparison": {
+    "release": {
+      "source": "8ad75c1f73ab94891cbfac3f147b1637b77c4035",
+      "profile": "release",
+      "rustc": "1.96.0",
+      "binaries": {
+        "functions": "6d8a0d2921f902136821e19270aae937f4c085eae8268d2b15e74b16bcc9777f"
+      },
+      "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+      "overlays": {
+        "benches/functions.rs": "9dc8e5b50c45c7373a40077bf276cee8d82621a933c835bdfe1a0f4b644db051",
+        "tests/support/spark_results.rs": "379a0466303bd64c5dc1a40d5baaeb5a5913f15fafec5bc813553168868cd633"
+      },
+      "adapter_sha256": "a135e44e1152e924aa8196dbbcba2c5304871ba18f2dcce17418cb46dac498f3",
+      "manifest_sha256": "f9116c6ce9385847ef368ca41125fc85d1e0f2fbbca976e7b461a86ebbbcf160"
+    },
+    "modes": {
+      "native": {
+        "types": [
+          "Float64"
+        ],
+        "rows_sha256": "9986aa892582ebbdfcbe8a4fef6797c8ecb61c71db43a0ae43dfd807911ecfc0",
+        "plan_sha256": "aad708c5f21e07f06b4a23230609a0cf347c7d3a101aabab80077d2c02cbecdf"
+      },
+      "spark-off": {
+        "types": [
+          "Float64"
+        ],
+        "rows_sha256": "9986aa892582ebbdfcbe8a4fef6797c8ecb61c71db43a0ae43dfd807911ecfc0",
+        "plan_sha256": "ab8b87b50a591ee0006f80ed468ccb4ae8f9a29e09cda2743fe00285a17b04bb"
+      },
+      "spark-on": {
+        "types": [
+          "Float64"
+        ],
+        "rows_sha256": "9986aa892582ebbdfcbe8a4fef6797c8ecb61c71db43a0ae43dfd807911ecfc0",
+        "plan_sha256": "ab8b87b50a591ee0006f80ed468ccb4ae8f9a29e09cda2743fe00285a17b04bb"
+      }
+    }
+  },
+  "plans": {
+    "native": [
+      "ProjectionExec: expr=[avg(bench.d)@0 as value]",
+      "  AggregateExec: mode=Single, gby=[], aggr=[avg(bench.d)]",
+      "    DataSourceExec: partitions=1, partition_sizes=[123]"
+    ],
+    "spark-off": [
+      "ProjectionExec: expr=[#3@0 as value]",
+      "  ProjectionExec: expr=[try_avg(bench.#2)@0 as #3]",
+      "    AggregateExec: mode=Single, gby=[], aggr=[try_avg(bench.#2)]",
+      "      ProjectionExec: expr=[d@0 as #2]",
+      "        DataSourceExec: partitions=1, partition_sizes=[123]"
+    ],
+    "spark-on": [
+      "ProjectionExec: expr=[#3@0 as value]",
+      "  ProjectionExec: expr=[try_avg(bench.#2)@0 as #3]",
+      "    AggregateExec: mode=Single, gby=[], aggr=[try_avg(bench.#2)]",
+      "      ProjectionExec: expr=[d@0 as #2]",
+      "        DataSourceExec: partitions=1, partition_sizes=[123]"
+    ]
+  }
+}
