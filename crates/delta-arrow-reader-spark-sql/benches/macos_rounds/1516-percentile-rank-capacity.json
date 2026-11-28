@@ -1,0 +1,20 @@
+{
+  "staging_report_head": "2919bccada6c6df838dd7adbd3bd5921cf8e6bc6",
+  "staging": "950b020eab787056bba64018ef0c6142ae4c8c37",
+  "candidate": "6f8a1754cb68df650074b7056f0465ad67443112",
+  "blocks": 9,
+  "samples": 9,
+  "preflight_seconds": 3600,
+  "preflight_process_seconds": 300,
+  "process_seconds": 130,
+  "max_seconds": 7200,
+  "case_ids": [
+    "aggregate.aggregate.approx_percentile",
+    "aggregate.aggregate.percentile_approx",
+    "window.window.percentile_approx",
+    "window.window.approx_percentile"
+  ],
+  "restricted_manifest_sha256": "f9116c6ce9385847ef368ca41125fc85d1e0f2fbbca976e7b461a86ebbbcf160",
+  "full_manifest_sha256": "ec6528b17cb072224aec6ea0ea3c1e910b9aa8cf6f5cadb0296f85b3f86f1f06",
+  "schedule_sha256": "e317b6fc4dcd463a155a55b32b8c9b036eaa7419176ff0ed06a2b3e7252d4102"
+}
