@@ -157,6 +157,10 @@ impl TimestampParser {
         parse: &mut impl FnMut(&'a str) -> SqlResult<TimestampValue<'a>>,
     ) -> Result<Option<i64>> {
         if let Some(datetime) = parse_ascii_whole_second_timestamp(value) {
+            if matches!(self, Self::Ltz { default_timezone } if default_timezone == "UTC") {
+                // The validated wall clock is already in UTC, which has no transitions.
+                return Ok(Some(datetime.and_utc().timestamp_micros()));
+            }
             return self.localize(datetime, "", safe);
         }
         self.parsed_timestamp_to_microseconds(parse(value), safe)
