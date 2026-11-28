@@ -1,0 +1,47 @@
+{
+  "source": "c812f96dc34fdc5f4e95ef5ea7642596ad388ac0",
+  "source_file": "vendor/sail/crates/sail-function/src/scalar/datetime/spark_date.rs",
+  "probe": "macos_rounds/1389-date-cast-profile.rs",
+  "probe_sha256": "f499208f8f933beaa2a6354941cb20d26e85a41ab057a1fda8375bcd3e958783",
+  "test": "scalar::datetime::spark_date::macos_date_cast_attribution::attribute_date_casts",
+  "blocks": 9,
+  "max_process_seconds": 60,
+  "max_seconds": 1200,
+  "rows": 262144,
+  "phases": [
+    "short_spark",
+    "short_native",
+    "short_guarded",
+    "short_arrow_rows",
+    "canonical_spark",
+    "canonical_native",
+    "canonical_guarded",
+    "canonical_arrow_rows"
+  ],
+  "comparisons": {
+    "short_array": [
+      "short_spark",
+      "short_native"
+    ],
+    "canonical_array": [
+      "canonical_spark",
+      "canonical_native"
+    ],
+    "short_guard": [
+      "short_guarded",
+      "short_arrow_rows"
+    ],
+    "canonical_guard": [
+      "canonical_guarded",
+      "canonical_arrow_rows"
+    ],
+    "short_collection": [
+      "short_arrow_rows",
+      "short_native"
+    ],
+    "canonical_collection": [
+      "canonical_arrow_rows",
+      "canonical_native"
+    ]
+  }
+}
