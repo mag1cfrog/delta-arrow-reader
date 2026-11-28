@@ -58,6 +58,10 @@ executed SQL and Arrow types, and cross-release source I/O. The
 12 query outputs preserve UTC microseconds for LTZ and
 microseconds without a timezone for NTZ.
 
+Formatting, strict root-package Clippy and the full Spark workspace
+suite passed on the candidate product commit. The remaining commits
+add the protocol and evidence.
+
 - [Exact results and release receipts](timestamp-1389-macos-utc-preflight.json)
 - [Full paired results](timestamp-1389-macos-utc-comparisons.json)
 - [Compressed raw samples](timestamp-1389-macos-utc-samples.jsonl.gz)
