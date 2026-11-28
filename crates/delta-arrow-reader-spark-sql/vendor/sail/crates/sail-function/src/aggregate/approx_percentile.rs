@@ -88,30 +88,23 @@ impl AggregateUDFImpl for ApproxPercentile {
     }
 
     fn accumulator(&self, args: AccumulatorArgs) -> Result<Box<dyn Accumulator>> {
-        let returns_array = matches!(args.expr_fields[1].data_type(), DataType::List(_));
-        let percentiles = if returns_array {
-            extract_percentiles_array(&args.exprs[1])?
+        Ok(Box::new(make_accumulator(args)?))
+    }
+
+    fn create_sliding_accumulator(&self, args: AccumulatorArgs) -> Result<Box<dyn Accumulator>> {
+        // Only physical literals guarantee the same configuration in each rebuilt frame.
+        let fixed_configuration = args.exprs[1..]
+            .iter()
+            .all(|expr| expr.downcast_ref::<Literal>().is_some());
+        let accumulator = make_accumulator(args)?;
+        if !accumulator.returns_array
+            && accumulator.value_type == DataType::Float64
+            && fixed_configuration
+        {
+            Ok(Box::new(SlidingPercentile::new(accumulator)))
         } else {
-            vec![scalar_percentile_value(&args.exprs[1])?]
-        };
-        let accuracy = if args.exprs.len() == 3 {
-            match get_scalar_value(&args.exprs[2])?.cast_to(&DataType::Int64)? {
-                ScalarValue::Int64(Some(value)) if (1..=i32::MAX as i64).contains(&value) => value,
-                _ => {
-                    return Err(DataFusionError::Plan(
-                        "approx_percentile accuracy must be a positive integer".into(),
-                    ));
-                }
-            }
-        } else {
-            10_000
-        };
-        Ok(Box::new(ApproxPercentileAccumulator {
-            summary: QuantileSummary::new(1.0 / accuracy as f64),
-            percentiles,
-            returns_array,
-            value_type: args.expr_fields[0].data_type().clone(),
-        }))
+            Ok(Box::new(accumulator))
+        }
     }
 
     fn state_fields(&self, args: StateFieldsArgs) -> Result<Vec<FieldRef>> {
@@ -138,6 +131,33 @@ impl AggregateUDFImpl for ApproxPercentile {
             )),
         ])
     }
+}
+
+fn make_accumulator(args: AccumulatorArgs) -> Result<ApproxPercentileAccumulator> {
+    let returns_array = matches!(args.expr_fields[1].data_type(), DataType::List(_));
+    let percentiles = if returns_array {
+        extract_percentiles_array(&args.exprs[1])?
+    } else {
+        vec![scalar_percentile_value(&args.exprs[1])?]
+    };
+    let accuracy = if args.exprs.len() == 3 {
+        match get_scalar_value(&args.exprs[2])?.cast_to(&DataType::Int64)? {
+            ScalarValue::Int64(Some(value)) if (1..=i32::MAX as i64).contains(&value) => value,
+            _ => {
+                return Err(DataFusionError::Plan(
+                    "approx_percentile accuracy must be a positive integer".into(),
+                ));
+            }
+        }
+    } else {
+        10_000
+    };
+    Ok(ApproxPercentileAccumulator {
+        summary: QuantileSummary::new(1.0 / accuracy as f64),
+        percentiles,
+        returns_array,
+        value_type: args.expr_fields[0].data_type().clone(),
+    })
 }
 
 fn scalar_percentile_value(expr: &Arc<dyn PhysicalExpr>) -> Result<f64> {
@@ -309,6 +329,173 @@ impl Accumulator for ApproxPercentileAccumulator {
     }
 }
 
+const FRAME_VALUES: usize = 5;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct FrameValues {
+    len: usize,
+    bits: [u64; FRAME_VALUES],
+}
+
+impl FrameValues {
+    fn push(&mut self, bits: u64) {
+        self.bits[self.len] = bits;
+        self.len += 1;
+    }
+
+    fn extend(self, entering: &Float64Array) -> Option<Self> {
+        if self.len + entering.len() - entering.null_count() > FRAME_VALUES {
+            return None;
+        }
+        let mut frame = self;
+        for value in entering.iter().flatten() {
+            frame.push(value.to_bits());
+        }
+        Some(frame)
+    }
+}
+
+#[derive(Debug, Default)]
+enum FrameResult {
+    #[default]
+    Uncached,
+    Rebuilt,
+    Evaluated(ScalarValue),
+    Reuse(ScalarValue),
+}
+
+#[derive(Debug)]
+struct SlidingPercentile {
+    inner: ApproxPercentileAccumulator,
+    frame: Option<FrameValues>,
+    entering: Option<ArrayRef>,
+    result: FrameResult,
+}
+
+impl SlidingPercentile {
+    fn new(inner: ApproxPercentileAccumulator) -> Self {
+        Self {
+            inner,
+            frame: Some(FrameValues::default()),
+            entering: None,
+            result: FrameResult::Uncached,
+        }
+    }
+
+    // With the same frame start, keep the original incremental summary and evaluation.
+    fn flush_entering(&mut self) -> Result<()> {
+        if let Some(entering) = self.entering.take() {
+            self.inner.update_batch(std::slice::from_ref(&entering))?;
+            self.frame = self
+                .frame
+                .and_then(|frame| frame.extend(entering.as_primitive()));
+            self.result = FrameResult::Uncached;
+        }
+        Ok(())
+    }
+}
+
+impl Accumulator for SlidingPercentile {
+    fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
+        self.flush_entering()?;
+        if self.frame.is_some() {
+            // The sliding executor calls update before retract for a moving frame.
+            self.entering = Some(Arc::clone(&values[0]));
+            Ok(())
+        } else {
+            self.inner.update_batch(values)
+        }
+    }
+
+    fn retract_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
+        let previous = self.frame.ok_or_else(|| {
+            DataFusionError::Internal("cannot retract an untracked percentile frame".into())
+        })?;
+        let departing = values[0].len() - values[0].null_count();
+        let retained = &previous.bits[departing.min(previous.len)..previous.len];
+        let entering = self.entering.take();
+        let entering = entering
+            .iter()
+            .flat_map(|array| {
+                array
+                    .as_primitive::<datafusion::arrow::datatypes::Float64Type>()
+                    .iter()
+            })
+            .flatten()
+            .skip(departing.saturating_sub(previous.len))
+            .map(f64::to_bits);
+        let mut rows = retained.iter().copied().chain(entering);
+        let mut next = FrameValues::default();
+        for value in rows.by_ref().take(FRAME_VALUES) {
+            next.push(value);
+        }
+        let extra = rows.next();
+        self.frame = extra.is_none().then_some(next);
+
+        // The cached result came from a fresh summary over these same ordered float bits.
+        if self.frame == Some(previous)
+            && let FrameResult::Evaluated(value) = std::mem::take(&mut self.result)
+        {
+            self.result = FrameResult::Reuse(value);
+            return Ok(());
+        }
+
+        self.inner.summary = QuantileSummary::new(self.inner.summary.relative_error);
+        for value in next.bits[..next.len]
+            .iter()
+            .copied()
+            .chain(extra)
+            .chain(rows)
+        {
+            self.inner.summary.insert(f64::from_bits(value));
+        }
+        self.result = if self.frame.is_some() {
+            FrameResult::Rebuilt
+        } else {
+            FrameResult::Uncached
+        };
+        Ok(())
+    }
+
+    fn supports_retract_batch(&self) -> bool {
+        // When the raw frame exceeds the bound, the executor replays the next moving frame.
+        self.frame.is_some()
+    }
+
+    fn evaluate(&mut self) -> Result<ScalarValue> {
+        self.flush_entering()?;
+        match std::mem::take(&mut self.result) {
+            FrameResult::Reuse(value) => {
+                self.result = FrameResult::Evaluated(value.clone());
+                Ok(value)
+            }
+            FrameResult::Rebuilt => {
+                let value = self.inner.evaluate()?;
+                self.result = FrameResult::Evaluated(value.clone());
+                Ok(value)
+            }
+            _ => self.inner.evaluate(),
+        }
+    }
+
+    fn state(&mut self) -> Result<Vec<ScalarValue>> {
+        self.flush_entering()?;
+        self.result = FrameResult::Uncached;
+        self.inner.state()
+    }
+
+    fn merge_batch(&mut self, states: &[ArrayRef]) -> Result<()> {
+        self.flush_entering()?;
+        self.frame = None;
+        self.result = FrameResult::Uncached;
+        self.inner.merge_batch(states)
+    }
+
+    fn size(&self) -> usize {
+        self.inner.size() + size_of::<Self>() - size_of::<ApproxPercentileAccumulator>()
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct RankSample {
     value: f64,
@@ -477,6 +664,96 @@ mod tests {
             returns_array: true,
             value_type: DataType::Float64,
         }
+    }
+
+    #[test]
+    fn sliding_reuse_matches_the_original_frame_replay() -> Result<()> {
+        use std::ops::Range;
+
+        fn float_bits(value: ScalarValue) -> Result<Option<u64>> {
+            let ScalarValue::Float64(value) = value else {
+                return Err(DataFusionError::Internal(
+                    "expected Float64 percentile".into(),
+                ));
+            };
+            Ok(value.map(f64::to_bits))
+        }
+
+        fn compare(input: &ArrayRef, frames: &[Range<usize>], accuracy: f64) -> Result<bool> {
+            let mut reference = accumulator(accuracy);
+            let mut candidate = SlidingPercentile::new(accumulator(accuracy));
+            let mut previous = 0..0;
+            let mut reused = false;
+            for frame in frames {
+                let moved = frame.start != previous.start;
+                let replay = moved && !candidate.supports_retract_batch();
+                if moved {
+                    reference = accumulator(accuracy);
+                }
+                if replay {
+                    candidate = SlidingPercentile::new(accumulator(accuracy));
+                }
+                let reference_start = if moved { frame.start } else { previous.end };
+                if frame.end > reference_start {
+                    reference.update_batch(&[
+                        input.slice(reference_start, frame.end - reference_start)
+                    ])?;
+                }
+                let candidate_start = if replay { frame.start } else { previous.end };
+                if frame.end > candidate_start {
+                    candidate.update_batch(&[
+                        input.slice(candidate_start, frame.end - candidate_start)
+                    ])?;
+                }
+                if moved && !replay {
+                    candidate.retract_batch(&[
+                        input.slice(previous.start, frame.start - previous.start)
+                    ])?;
+                }
+                reused |= matches!(candidate.result, FrameResult::Reuse(_));
+                assert_eq!(
+                    float_bits(reference.evaluate()?)?,
+                    float_bits(candidate.evaluate()?)?,
+                    "frame {frame:?}, accuracy {accuracy}",
+                );
+                previous = frame.clone();
+            }
+            Ok(reused)
+        }
+
+        let moving = (0..16_usize)
+            .map(|row| row.saturating_sub(4)..row + 1)
+            .collect::<Vec<_>>();
+        let widths = [0..1, 0..4, 2..13, 5..14, 10..15, 11..16];
+        let jumps = [0..1, 3..9, 13..16];
+        let repeating: ArrayRef = Arc::new(Float64Array::from(vec![Some(0.5); 16]));
+        let nulls: ArrayRef = Arc::new(Float64Array::from(vec![None::<f64>; 16]));
+        let mixed: ArrayRef = Arc::new(Float64Array::from(vec![
+            Some(1.0),
+            None,
+            Some(-0.0),
+            Some(0.0),
+            Some(f64::from_bits(0x7ff8_0000_0000_0001)),
+            Some(f64::from_bits(0xfff8_0000_0000_0002)),
+            Some(8.0),
+            Some(3.0),
+            Some(-9.0),
+            None,
+            Some(7.0),
+            Some(7.0),
+            Some(7.0),
+            Some(7.0),
+            Some(7.0),
+            Some(7.0),
+        ]));
+        for accuracy in [1.0, 10_000.0] {
+            assert!(compare(&repeating, &moving, accuracy)?);
+            assert!(compare(&nulls, &moving, accuracy)?);
+            compare(&mixed, &moving, accuracy)?;
+            compare(&mixed, &widths, accuracy)?;
+            compare(&mixed, &jumps, accuracy)?;
+        }
+        Ok(())
     }
 
     #[test]
