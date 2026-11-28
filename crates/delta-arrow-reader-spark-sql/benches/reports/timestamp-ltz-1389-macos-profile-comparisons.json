@@ -1,0 +1,19 @@
+{
+  "complete": true,
+  "comparisons": {
+    "complete_array": {
+      "spark_ns_per_row": 39.649566650390625,
+      "native_ns_per_row": 36.238590240478516,
+      "gap_ns_per_row": 3.3948421478271484,
+      "floor_ns_per_row": 0.5636997222900391,
+      "decision": "slower"
+    },
+    "utc_localization": {
+      "spark_ns_per_row": 31.19683265686035,
+      "native_ns_per_row": 1.9381847381591797,
+      "gap_ns_per_row": 29.259441375732422,
+      "floor_ns_per_row": 0.28395652770996094,
+      "decision": "slower"
+    }
+  }
+}
