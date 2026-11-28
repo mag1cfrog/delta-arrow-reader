@@ -1,0 +1,421 @@
+{
+  "shapes": {
+    "year_month": {
+      "outcomes": {
+        "ok": 18
+      },
+      "stacks": {
+        "lexer": 4095,
+        "unresolved": 724,
+        "grammar": 5329,
+        "conversion": 3410,
+        "nonparser": 68
+      },
+      "per_call_ns": {
+        "median": 909.1095130443573,
+        "a": 908.8848829269409,
+        "b": 910.1110496520996,
+        "paired_delta": 0.22619962692260742,
+        "floor": 108.32554125785828
+      },
+      "phase_cost_ns_estimate": {
+        "lexer": 274.58352676771227,
+        "unresolved": 48.546635745988695,
+        "grammar": 357.3273783016212,
+        "conversion": 228.65197222903512
+      }
+    },
+    "day_time": {
+      "outcomes": {
+        "ok": 18
+      },
+      "stacks": {
+        "lexer": 5348,
+        "unresolved": 600,
+        "grammar": 6147,
+        "conversion": 1524,
+        "nonparser": 32
+      },
+      "per_call_ns": {
+        "median": 1482.6963443756104,
+        "a": 1491.5387630462646,
+        "b": 1481.5144143104553,
+        "paired_delta": -7.169365882873535,
+        "floor": 22.259801626205444
+      },
+      "phase_cost_ns_estimate": {
+        "lexer": 582.2351163610224,
+        "unresolved": 65.32181559772128,
+        "grammar": 669.2220007986546,
+        "conversion": 165.91741161821207
+      }
+    },
+    "calendar": {
+      "outcomes": {
+        "ok": 18
+      },
+      "stacks": {
+        "lexer": 5403,
+        "unresolved": 459,
+        "grammar": 5555,
+        "conversion": 2184,
+        "nonparser": 21
+      },
+      "per_call_ns": {
+        "median": 2266.4111652374268,
+        "a": 2267.533202648163,
+        "b": 2265.2891278266907,
+        "paired_delta": -8.245110511779785,
+        "floor": 33.396859884262085
+      },
+      "phase_cost_ns_estimate": {
+        "lexer": 900.3322936385425,
+        "unresolved": 76.48575287434592,
+        "grammar": 925.6609089694806,
+        "conversion": 363.9322097550577
+      }
+    },
+    "quoted_year_month": {
+      "outcomes": {
+        "ok": 18
+      },
+      "stacks": {
+        "lexer": 3533,
+        "conversion": 2342,
+        "grammar": 7353,
+        "unresolved": 329,
+        "nonparser": 61
+      },
+      "per_call_ns": {
+        "median": 1915.234436750412,
+        "a": 1910.2630615234375,
+        "b": 1917.3672795295715,
+        "paired_delta": 10.70408010482788,
+        "floor": 22.494176864624023
+      },
+      "phase_cost_ns_estimate": {
+        "lexer": 499.11656450831345,
+        "conversion": 330.8607399033315,
+        "grammar": 1038.778403291715,
+        "unresolved": 46.47872904705212
+      }
+    }
+  },
+  "mapped_parse_entry_phases": {
+    "h9e89b4a77cd99b31": "lexer",
+    "hc915ac7223f64a4e": "lexer",
+    "h9d6e98a3320652a6": "lexer",
+    "h314de01661207e33": "lexer",
+    "ha31e8ae4cedbdf11": "grammar",
+    "h6abb0f4d07b3dca2": "grammar",
+    "h5977b782268a4e09": "grammar",
+    "h056b32deac42ee4b": "grammar"
+  },
+  "leading_resolved_frames": {
+    "lexer": [
+      [
+        "chumsky::Parser::parse::h9d6e98a3320652a6",
+        15736
+      ],
+      [
+        "chumsky::Parser::parse::h9e89b4a77cd99b31",
+        1956
+      ],
+      [
+        "sail_sql_parser::lexer::create_lexer::h28a6b0c5b5af9160",
+        427
+      ],
+      [
+        "core::ptr::drop_in_place$LT$chumsky..combinator..ThenIgnore$LT$chumsky..combinator..Collect$LT$chumsky..combinator..Repeated$LT$chumsky..primitive..Choice$LT$$LP$chumsky..combinator..MapWith$LT$chumsky..combinator..IgnoreThen$LT$chumsky..primitive..Just$LT$$RF$str$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..combinator..Repeated$LT$chumsky..primitive..NoneOf$LT$$RF$str$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$LP$$RP$$C$sail_sql_parser..lexer..single_line_comment$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..recursive..Recursive$LT$dyn$u20$chumsky..Parser$LT$$RF$str$C$$LP$sail_sql_parser..token..Token$C$chumsky..span..SimpleSpan$RP$$GT$$GT$$C$chumsky..Boxed$LT$$RF$str$C$$LP$sail_sql_parser..token..Token$C$chumsky..span..SimpleSpan$RP$$GT$$C$chumsky..combinator..MapWith$LT$chumsky..combinator..Repeated$LT$chumsky..combinator..Filter$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$sail_sql_parser..lexer..word$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$LP$$RP$$C$sail_sql_parser..lexer..word$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..MapWith$LT$chumsky..combinator..Collect$LT$chumsky..combinator..Repeated$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$usize$GT$$C$usize$C$sail_sql_parser..lexer..whitespace$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$sail_sql_parser..lexer..create_lexer$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..MapWith$LT$chumsky..combinator..Collect$LT$chumsky..combinator..Repeated$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$usize$GT$$C$usize$C$sail_sql_parser..lexer..whitespace$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$sail_sql_parser..lexer..create_lexer$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..MapWith$LT$chumsky..combinator..Collect$LT$chumsky..combinator..Repeated$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$usize$GT$$C$usize$C$sail_sql_parser..lexer..whitespace$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$sail_sql_parser..lexer..create_lexer$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..MapWith$LT$chumsky..combinator..Collect$LT$chumsky..combinator..Repeated$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$usize$GT$$C$usize$C$sail_sql_parser..lexer..whitespace$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$sail_sql_parser..lexer..create_lexer$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..TryMapWith$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$sail_sql_parser..lexer..punctuation$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$RP$$GT$$C$$LP$sail_sql_parser..token..Token$C$chumsky..span..SimpleSpan$RP$$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$LP$sail_sql_parser..token..Token$C$chumsky..span..SimpleSpan$RP$$C$alloc..vec..Vec$LT$$LP$sail_sql_parser..token..Token$C$chumsky..span..SimpleSpan$RP$$GT$$GT$$C$chumsky..primitive..End$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$LP$$RP$$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$GT$::h7630a3931efa1365",
+        140
+      ],
+      [
+        "core::ptr::drop_in_place$LT$chumsky..primitive..Choice$LT$$LP$chumsky..combinator..MapWith$LT$chumsky..combinator..ThenIgnore$LT$chumsky..combinator..ThenIgnore$LT$chumsky..combinator..Filter$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$sail_sql_parser..lexer..string_prefix$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$sail_sql_parser..lexer..raw_string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$char$C$sail_sql_parser..lexer..string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..Repeated$LT$chumsky..combinator..Or$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$LP$$RP$$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..combinator..PaddedBy$LT$chumsky..combinator..Repeated$LT$chumsky..combinator..AndIs$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..combinator..Not$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$LP$$RP$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$LP$$RP$$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$sail_sql_parser..lexer..raw_string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$char$C$sail_sql_parser..lexer..string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..MapWith$LT$chumsky..combinator..ThenIgnore$LT$chumsky..combinator..ThenIgnore$LT$chumsky..combinator..Filter$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$sail_sql_parser..lexer..string_prefix$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$sail_sql_parser..lexer..raw_string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$char$C$sail_sql_parser..lexer..string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..Repeated$LT$chumsky..combinator..Or$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$LP$$RP$$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..combinator..PaddedBy$LT$chumsky..combinator..Repeated$LT$chumsky..combinator..AndIs$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..combinator..Not$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$LP$$RP$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$LP$$RP$$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$sail_sql_parser..lexer..raw_string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$char$C$sail_sql_parser..lexer..string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..MapWith$LT$chumsky..combinator..Or$LT$chumsky..combinator..To$LT$chumsky..combinator..PaddedBy$LT$chumsky..combinator..Repeated$LT$chumsky..combinator..Or$LT$chumsky..combinator..Or$LT$chumsky..combinator..Ignored$LT$chumsky..combinator..AndIs$LT$chumsky..combinator..AndIs$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..combinator..Not$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$LP$$RP$$GT$$C$chumsky..combinator..Not$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$LP$$RP$$GT$$C$char$GT$$C$chumsky..combinator..Ignored$LT$chumsky..combinator..Then$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$char$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$LP$char$C$char$RP$$GT$$GT$$C$chumsky..combinator..Repeated$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$GT$$C$$LP$$RP$$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$LP$$RP$$C$core..option..Option$LT$char$GT$$GT$$C$chumsky..combinator..Map$LT$chumsky..combinator..ThenIgnore$LT$chumsky..combinator..ThenIgnore$LT$chumsky..combinator..Filter$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$sail_sql_parser..lexer..string_prefix$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$sail_sql_parser..lexer..string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..Repeated$LT$chumsky..combinator..Or$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$LP$$RP$$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..Boxed$LT$$RF$str$C$$LP$$RP$$GT$$C$$LP$$RP$$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$core..option..Option$LT$char$GT$..Some$GT$$GT$$C$core..option..Option$LT$char$GT$$C$sail_sql_parser..lexer..escaped_string_token$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$chumsky..combinator..Or$LT$chumsky..combinator..To$LT$chumsky..combinator..PaddedBy$LT$chumsky..combinator..Repeated$LT$chumsky..combinator..Or$LT$chumsky..combinator..Or$LT$chumsky..combinator..Ignored$LT$chumsky..combinator..AndIs$LT$chumsky..combinator..AndIs$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..combinator..Not$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$LP$$RP$$GT$$C$chumsky..combinator..Not$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$LP$$RP$$GT$$C$char$GT$$C$chumsky..combinator..Ignored$LT$chumsky..combinator..Then$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$char$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$LP$char$C$char$RP$$GT$$GT$$C$chumsky..combinator..Repeated$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$GT$$C$$LP$$RP$$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$LP$$RP$$C$core..option..Option$LT$char$GT$$GT$$C$chumsky..combinator..Map$LT$chumsky..combinator..ThenIgnore$LT$chumsky..combinator..ThenIgnore$LT$chumsky..combinator..Filter$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$sail_sql_parser..lexer..string_prefix$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$sail_sql_parser..lexer..string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..Repeated$LT$chumsky..combinator..Or$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$LP$$RP$$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..Boxed$LT$$RF$str$C$$LP$$RP$$GT$$C$$LP$$RP$$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$core..option..Option$LT$char$GT$..Some$GT$$GT$$C$sail_sql_parser..lexer..string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..MapWith$LT$chumsky..combinator..ThenIgnore$LT$chumsky..combinator..OrNot$LT$chumsky..combinator..ThenIgnore$LT$chumsky..combinator..Filter$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$sail_sql_parser..lexer..string_prefix$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$sail_sql_parser..lexer..string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..Repeated$LT$chumsky..combinator..Or$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$LP$$RP$$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$GT$$C$chumsky..Boxed$LT$$RF$str$C$$LP$$RP$$GT$$C$$LP$$RP$$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$core..option..Option$LT$char$GT$$C$sail_sql_parser..lexer..escaped_string_token$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$chumsky..combinator..ThenIgnore$LT$chumsky..combinator..OrNot$LT$chumsky..combinator..ThenIgnore$LT$chumsky..combinator..Filter$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$sail_sql_parser..lexer..string_prefix$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$sail_sql_parser..lexer..string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..Repeated$LT$chumsky..combinator..Or$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$LP$$RP$$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$GT$$C$chumsky..Boxed$LT$$RF$str$C$$LP$$RP$$GT$$C$$LP$$RP$$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$sail_sql_parser..lexer..string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..MapWith$LT$chumsky..combinator..IgnoreThen$LT$chumsky..primitive..Just$LT$$RF$str$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..combinator..PaddedBy$LT$chumsky..combinator..Repeated$LT$chumsky..combinator..AndIs$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..combinator..Not$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$LP$$RP$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$LP$$RP$$C$sail_sql_parser..lexer..unicode_escape_string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$char$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..MapWith$LT$chumsky..combinator..IgnoreThen$LT$chumsky..primitive..Just$LT$$RF$str$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..combinator..PaddedBy$LT$chumsky..combinator..Repeated$LT$chumsky..combinator..AndIs$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..combinator..Not$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$LP$$RP$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$LP$$RP$$C$sail_sql_parser..lexer..unicode_escape_string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$C$char$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..MapWith$LT$chumsky..combinator..PaddedBy$LT$chumsky..combinator..Repeated$LT$chumsky..combinator..Or$LT$chumsky..combinator..Ignored$LT$chumsky..primitive..NoneOf$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$chumsky..combinator..Repeated$LT$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$GT$$C$$LP$$RP$$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$LP$$RP$$C$sail_sql_parser..lexer..backtick_quoted_string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$chumsky..combinator..MapWith$LT$chumsky..combinator..ThenWithCtx$LT$chumsky..combinator..ToSlice$LT$chumsky..combinator..PaddedBy$LT$chumsky..combinator..Repeated$LT$chumsky..primitive..NoneOf$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$char$GT$$C$$LP$$RP$$GT$$C$chumsky..combinator..ThenIgnore$LT$chumsky..combinator..Repeated$LT$chumsky..combinator..AndIs$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$RF$str$GT$$GT$$C$chumsky..combinator..Not$LT$chumsky..combinator..Configure$LT$chumsky..primitive..Just$LT$$RF$str$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$RF$str$GT$$GT$$C$sail_sql_parser..lexer..dollar_quoted_string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$$RF$str$GT$$C$$LP$$RP$$GT$$C$char$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$RF$str$GT$$GT$$C$chumsky..combinator..Configure$LT$chumsky..primitive..Just$LT$$RF$str$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$RF$str$GT$$GT$$C$sail_sql_parser..lexer..dollar_quoted_string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$RF$str$GT$$GT$$C$$RF$str$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$RF$str$GT$$GT$$C$$LP$$RF$str$C$$LP$$RP$$RP$$C$sail_sql_parser..lexer..dollar_quoted_string$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$$GT$$RP$$GT$$GT$::ha31ede40bee9af53",
+        115
+      ],
+      [
+        "core::ptr::drop_in_place$LT$chumsky..combinator..MapWith$LT$chumsky..combinator..DelimitedBy$LT$chumsky..combinator..Repeated$LT$chumsky..combinator..Or$LT$chumsky..combinator..Ignored$LT$chumsky..combinator..AndIs$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..combinator..Not$LT$chumsky..combinator..Or$LT$chumsky..primitive..Just$LT$$RF$str$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$$RF$str$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$GT$$C$$RF$str$GT$$C$$LP$$RP$$GT$$C$char$GT$$C$chumsky..combinator..Ignored$LT$chumsky..recursive..Recursive$LT$dyn$u20$chumsky..Parser$LT$$RF$str$C$$LP$sail_sql_parser..token..Token$C$chumsky..span..SimpleSpan$RP$$GT$$GT$$C$$LP$sail_sql_parser..token..Token$C$chumsky..span..SimpleSpan$RP$$GT$$GT$$C$$LP$$RP$$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$$RF$str$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$$RF$str$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$RF$str$C$$RF$str$GT$$C$$LP$$RP$$C$sail_sql_parser..lexer..multi_line_comment$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$..$u7b$$u7b$closure$u7d$$u7d$$GT$$GT$::hfe5d6ead320d85be",
+        3
+      ],
+      [
+        "core::ptr::drop_in_place$LT$chumsky..combinator..MapWith$LT$chumsky..combinator..DelimitedBy$LT$chumsky..combinator..Repeated$LT$chumsky..combinator..Or$LT$chumsky..combinator..Ignored$LT$chumsky..combinator..AndIs$LT$chumsky..primitive..Any$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..combinator..Not$LT$chumsky..combinator..Or$LT$chumsky..primitive..Just$LT$$RF$str$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$$RF$str$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$GT$$C$$RF$str$GT$$C$$LP$$RP$$GT$$C$char$GT$$C$chumsky..combinator..Ignored$LT$chumsky..recursive..Recursive$LT$dyn$u20$chumsky..Parser$LT$$RF$str$C$$LP$sail_sql_parser..token..Token$C$chumsky..span..SimpleSpan$RP$$GT$$GT$$C$$LP$sail_sql_parser..token..Token$C$chumsky..span..SimpleSpan$RP$$GT$$GT$$C$$LP$$RP$$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$$RF$str$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$chumsky..primitive..Just$LT$$RF$str$C$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$$C$$RF$str$C$$RF$str$GT$$C$$LP$$RP$$C$sail_sql_parser..lexer..multi_line_comment$LT$$RF$str$C$chumsky..extra..Full$LT$chumsky..error..EmptyErr$C$$LP$$RP$$C$$LP$$RP$$GT$$GT$..$u7b$$u7b$closure$u7d$$u7d$..$u7b$$u7b$closure$u7d$$u7d$$GT$$GT$::h636cf53747d55e3c",
+        1
+      ],
+      [
+        "sail_sql_parser::lexer::create_lexer::h2c84127c564f1e02",
+        1
+      ]
+    ],
+    "grammar": [
+      [
+        "chumsky::Parser::parse::h5977b782268a4e09",
+        7471
+      ],
+      [
+        "sail_sql_parser::ast::keywords::parse_keyword::h819d9956ed623cc0",
+        4593
+      ],
+      [
+        "_$LT$sail_sql_parser..ast..literal..NumberLiteral$u20$as$u20$sail_sql_parser..tree..parser..TreeParser$LT$I$C$E$GT$$GT$::parser::_$u7b$$u7b$closure$u7d$$u7d$::hdeecb7571f3ce135",
+        3858
+      ],
+      [
+        "_$LT$sail_sql_parser..ast..literal..StringLiteral$u20$as$u20$sail_sql_parser..tree..parser..TreeParser$LT$I$C$E$GT$$GT$::parser::_$u7b$$u7b$closure$u7d$$u7d$::h85dfbfb4f3575b8f",
+        3609
+      ],
+      [
+        "_$LT$sail_sql_parser..ast..expression..IntervalExpr$u20$as$u20$core..clone..Clone$GT$::clone::h747b4c6468b2d799",
+        921
+      ],
+      [
+        "chumsky::Parser::parse::ha31e8ae4cedbdf11",
+        783
+      ],
+      [
+        "_$LT$sail_sql_parser..ast..expression..Expr$u20$as$u20$core..clone..Clone$GT$::clone::hb8974a8ed8bf180f",
+        753
+      ],
+      [
+        "sail_sql_parser::ast::literal::NumberState::next_slice::h8b92eae5283346ff",
+        609
+      ]
+    ],
+    "conversion": [
+      [
+        "sail_sql_analyzer::literal::interval::from_ast_standard_interval::h6b502570702746e8",
+        4027
+      ],
+      [
+        "sail_sql_analyzer::literal::interval::from_ast_signed_interval_with_rule::ha34eae69b39696fa",
+        2767
+      ],
+      [
+        "sail_sql_analyzer::literal::interval::_$LT$impl$u20$core..str..traits..FromStr$u20$for$u20$sail_sql_analyzer..literal..utils..Signed$LT$sail_sql_analyzer..literal..interval..DecimalSecond$GT$$GT$::from_str::hf6ecb0c8dc476764",
+        1139
+      ],
+      [
+        "sail_sql_analyzer::literal::interval::from_ast_multi_unit_interval::hf0007bb4fd296b50",
+        570
+      ],
+      [
+        "sail_sql_analyzer::literal::utils::parse_signed_value::ha61f0f021e23678c",
+        377
+      ],
+      [
+        "sail_sql_analyzer::literal::utils::parse_signed_value::h7380c7053ecff823",
+        297
+      ],
+      [
+        "sail_sql_analyzer::literal::interval::from_ast_unqualified_interval::hfed3c2affe7f372c",
+        195
+      ],
+      [
+        "sail_sql_analyzer::literal::utils::parse_signed_value::hcdac5ddbe3ea6c35",
+        55
+      ]
+    ]
+  },
+  "leading_unresolved_frames": {
+    "year_month": [
+      [
+        "macos_interval_profile::main::hc029418d8b5ea29b",
+        168
+      ],
+      [
+        "_platform_memmove",
+        107
+      ],
+      [
+        "_$LT$alloc..vec..Vec$LT$T$C$A$GT$$u20$as$u20$core..clone..Clone$GT$::clone::h3d7a8fa3a92a6811",
+        84
+      ],
+      [
+        "_xzm_free",
+        59
+      ],
+      [
+        "_$LT$chumsky..primitive..Choice$LT$$LP$S_$C$T_$C$U_$C$V_$C$W_$C$X_$C$Y_$C$Z_$RP$$GT$$u20$as$u20$chumsky..Parser$LT$I$C$O$C$E$GT$$GT$::go::h138590771d112854",
+        36
+      ],
+      [
+        "_$LT$chumsky..primitive..Any$LT$I$C$E$GT$$u20$as$u20$chumsky..Parser$LT$I$C$$LT$I$u20$as$u20$chumsky..input..Input$GT$..Token$C$E$GT$$GT$::go::h3848b8c8484aced9",
+        30
+      ],
+      [
+        "_malloc_zone_malloc",
+        25
+      ],
+      [
+        "<deduplicated_symbol>",
+        24
+      ]
+    ],
+    "day_time": [
+      [
+        "mach_absolute_time",
+        91
+      ],
+      [
+        "macos_interval_profile::main::hc029418d8b5ea29b",
+        85
+      ],
+      [
+        "_$LT$alloc..vec..Vec$LT$T$C$A$GT$$u20$as$u20$core..clone..Clone$GT$::clone::h3d7a8fa3a92a6811",
+        76
+      ],
+      [
+        "_xzm_xzone_malloc_tiny",
+        59
+      ],
+      [
+        "_$LT$chumsky..primitive..Choice$LT$$LP$S_$C$T_$C$U_$C$V_$C$W_$C$X_$C$Y_$C$Z_$RP$$GT$$u20$as$u20$chumsky..Parser$LT$I$C$O$C$E$GT$$GT$::go::h138590771d112854",
+        38
+      ],
+      [
+        "_xzm_free",
+        38
+      ],
+      [
+        "_platform_memmove",
+        36
+      ],
+      [
+        "_$LT$chumsky..combinator..MapWith$LT$A$C$OA$C$F$GT$$u20$as$u20$chumsky..Parser$LT$I$C$O$C$E$GT$$GT$::go_emit::hf3a26eba924965f3",
+        29
+      ]
+    ],
+    "calendar": [
+      [
+        "_$LT$alloc..vec..Vec$LT$T$C$A$GT$$u20$as$u20$core..clone..Clone$GT$::clone::h3d7a8fa3a92a6811",
+        82
+      ],
+      [
+        "macos_interval_profile::main::hc029418d8b5ea29b",
+        69
+      ],
+      [
+        "mach_absolute_time",
+        60
+      ],
+      [
+        "_$LT$chumsky..primitive..Choice$LT$$LP$S_$C$T_$C$U_$C$V_$C$W_$C$X_$C$Y_$C$Z_$RP$$GT$$u20$as$u20$chumsky..Parser$LT$I$C$O$C$E$GT$$GT$::go::h138590771d112854",
+        45
+      ],
+      [
+        "_xzm_xzone_malloc_tiny",
+        28
+      ],
+      [
+        "_$LT$chumsky..combinator..MapWith$LT$A$C$OA$C$F$GT$$u20$as$u20$chumsky..Parser$LT$I$C$O$C$E$GT$$GT$::go_emit::hf3a26eba924965f3",
+        27
+      ],
+      [
+        "_platform_memmove",
+        23
+      ],
+      [
+        "_xzm_free",
+        22
+      ]
+    ],
+    "quoted_year_month": [
+      [
+        "macos_interval_profile::main::hc029418d8b5ea29b",
+        76
+      ],
+      [
+        "_platform_memmove",
+        53
+      ],
+      [
+        "_xzm_free",
+        39
+      ],
+      [
+        "_$LT$chumsky..primitive..Any$LT$I$C$E$GT$$u20$as$u20$chumsky..Parser$LT$I$C$$LT$I$u20$as$u20$chumsky..input..Input$GT$..Token$C$E$GT$$GT$::go::h3848b8c8484aced9",
+        22
+      ],
+      [
+        "<deduplicated_symbol>",
+        18
+      ],
+      [
+        "_$LT$alloc..vec..Vec$LT$T$C$A$GT$$u20$as$u20$core..clone..Clone$GT$::clone::h3d7a8fa3a92a6811",
+        16
+      ],
+      [
+        "_xzm_xzone_malloc",
+        15
+      ],
+      [
+        "_$LT$chumsky..primitive..End$LT$I$C$E$GT$$u20$as$u20$chumsky..Parser$LT$I$C$$LP$$RP$$C$E$GT$$GT$::go::h53a89fee8594f3cf",
+        14
+      ]
+    ]
+  },
+  "build": {
+    "source": "e6b4b4fd48ad0b17facdd81ed1373477f6b52035",
+    "rustc": "1.96.0",
+    "profile": "release",
+    "frozen_probe_sha256": "6d84b32e04f5a3449e9cb54c2d51fa75fb245e00edcdd7f3382add57b8f1198c",
+    "probe_sha256": "ceb7a8a3fcfb2ff5261f90ded9c64b20f8f1c267b1019066f767fd2344fbde2c",
+    "executable_sha256": "46c40e0fdc0590c86d9b29af126c1cd68f36118f273b8aee01ec589fe5cdbd0f"
+  },
+  "sealed_staging_execution": {
+    "source": "e6b4b4fd48ad0b17facdd81ed1373477f6b52035",
+    "profile": "release",
+    "rustc": "1.96.0",
+    "binaries": {
+      "execution": "a101cb4ba0c810bfddff90bbc03afe117307407e8a54045926ea5a9fc5d4c462"
+    },
+    "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+    "overlays": {
+      "benches/macos_1560_parsers.json": "e1dad860654f5ca67ea020efa2e0e7f88ec2f3e4cf30119eadafa69e3854b573",
+      "benches/execution.rs": "848d88eee299b81b7620dbe64abe0e340180aad1dec5fe049d604d2c69e708cd"
+    }
+  },
+  "linked_entry_instructions": {
+    "interval_parser": [
+      31,
+      31
+    ],
+    "parse_interval_literal": [
+      390,
+      390
+    ],
+    "from_ast_unqualified_interval": [
+      20,
+      20
+    ],
+    "from_ast_multi_unit_interval": [
+      1435,
+      1435
+    ]
+  },
+  "batch_closure": "The SF1 executable emits its 412-instruction closure as a symbol. The probe inlines the closure in main.",
+  "parse_entry_evidence": {
+    "batch": {
+      "caller": "macos_interval_profile::main",
+      "lexer_sites": [
+        "0x1001593a8",
+        "0x1001594fc"
+      ],
+      "grammar_sites": [
+        "0x10015970c",
+        "0x1001597cc"
+      ]
+    },
+    "scoped": {
+      "caller": "sail_sql_analyzer::parser::parse_interval_literal",
+      "lexer_sites": [
+        "0x1002d5c00",
+        "0x1002d5cd0"
+      ],
+      "grammar_sites": [
+        "0x1002d5ea0",
+        "0x1002d5f30"
+      ]
+    },
+    "classification": "Lexer calls pass the SQL string pointer and length in registers. Grammar calls pass the temporary mapped token input. Leaf samples are attributed to the deepest matching phase on the call path."
+  }
+}

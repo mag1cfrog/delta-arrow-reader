@@ -1,0 +1,15 @@
+{
+  "source": "e6b4b4fd48ad0b17facdd81ed1373477f6b52035",
+  "frozen_probe_sha256": "6d84b32e04f5a3449e9cb54c2d51fa75fb245e00edcdd7f3382add57b8f1198c",
+  "blocks": 9,
+  "max_seconds": 900,
+  "sample_seconds": 1,
+  "sample_interval_ms": 1,
+  "calls_per_process": 2097152,
+  "shapes": [
+    "year_month",
+    "day_time",
+    "calendar",
+    "quoted_year_month"
+  ]
+}
