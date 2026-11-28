@@ -537,8 +537,8 @@ impl QuantileSummary {
             return;
         }
         self.pending_values.sort_by(f64::total_cmp);
+        let mut samples = Vec::with_capacity(self.samples.len() + self.pending_values.len());
         let mut existing = std::mem::take(&mut self.samples).into_iter().peekable();
-        let mut samples = Vec::new();
         let last = self.pending_values.len() - 1;
         for (i, value) in self.pending_values.drain(..).enumerate() {
             while existing.peek().is_some_and(|s| s.value <= value) {

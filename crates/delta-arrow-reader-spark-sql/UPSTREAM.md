@@ -2492,6 +2492,15 @@ compression and typed conversion are preserved.
 The [Mac profile](benches/reports/percentile-1516-macos-profile.md)
 records the repeated summary work and the lossy state counterexample.
 
+### Reserve approximate-percentile rank buffers (#1516)
+
+The buffer flush preserves every existing rank and adds one rank
+for each pending value. Reserve that combined length before the
+original merge loop. The sort, insertion order, rank calculations,
+compression and state serialization are preserved.
+The [Mac aggregate profile](benches/reports/percentile-1516-macos-aggregate-profile.md)
+records the repeated rank vector growth that prompted this change.
+
 ### Approximate percentile ranks
 
 Spark APPROX_PERCENTILE and PERCENTILE_APPROX use a local Rust adaptation of
