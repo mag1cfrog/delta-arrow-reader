@@ -8,8 +8,8 @@ control stays within its floor. The candidate is also faster than
 native in both ANSI modes in this session.
 
 The [phase attribution](date-format-1389-macos-profile.md) isolated
-the repeated formatter work. The candidate sends the parsed UTC
-microseconds directly to an Arrow Utf8 builder for the fixed
+the repeated formatter work. The candidate formats the parsed UTC
+timestamps directly into an Arrow Utf8 builder for the fixed
 `yyyy/MM/dd HH:mm` pattern. It uses the same input parsing, NULLs
 and year-of-era rule. The [protocol](../macos_rounds/1389-date-format.md)
 pins the full 6,001,215-row SF1 statement and the decision rule.
@@ -42,6 +42,10 @@ preflight passed all five full comparisons across the two releases
 and the native reference, covering values, NULLs, executed SQL and
 Arrow types, and cross-release source I/O. All six query outputs
 had 6,001,215 rows with Arrow types Int64, Int32 and Utf8.
+
+Formatting, strict root-package Clippy and the full Spark workspace
+suite passed at the candidate product commit. The remaining commits
+add the protocol and evidence.
 
 - [Exact results and release receipts](date-format-1389-macos-preflight.json)
 - [Full paired results](date-format-1389-macos-comparisons.json)
