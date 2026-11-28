@@ -1,0 +1,38 @@
+{
+  "source": "4e9694867ddf4eeef16d80cf7b08709c87eed6ff",
+  "case_ids": [
+    "scalar.array.array_insert"
+  ],
+  "manifest_sha256": "f9116c6ce9385847ef368ca41125fc85d1e0f2fbbca976e7b461a86ebbbcf160",
+  "instrument_sha256": "38215f9a009c3507c1f39e24552d11f7de499e858c206ca747fa68b03727634b",
+  "schedule_sha256": "e317b6fc4dcd463a155a55b32b8c9b036eaa7419176ff0ed06a2b3e7252d4102",
+  "blocks": 9,
+  "samples": 9,
+  "prior_decisions": {},
+  "process_seconds": 130,
+  "max_seconds": 3600,
+  "preflight_seconds": 1800,
+  "preflight_process_seconds": 300,
+  "phases": [
+    "create",
+    "discard",
+    "replay",
+    "update",
+    "retract",
+    "merge",
+    "evaluate",
+    "state",
+    "materialize",
+    "convert",
+    "summary_insert",
+    "summary_compress",
+    "summary_query",
+    "case_total",
+    "case_predicates",
+    "array_length",
+    "insert_copy",
+    "native_slice",
+    "native_concat"
+  ],
+  "parent_adapter_sha256": "10691c39b0bd682aecc6d7a4342cac2ba06ca495ff2bb1abcb528c7562ac3a5c"
+}
