@@ -109,6 +109,26 @@ impl TryAvgAccumulator {
         if self.failed {
             return;
         }
+        let valid = arr.len() - arr.null_count();
+        if valid == 0 {
+            return;
+        }
+        if let Some(count) = i64::try_from(valid)
+            .ok()
+            .and_then(|valid| self.count.checked_add(valid))
+        {
+            let mut sum = self.sum_f64.unwrap_or(0.0);
+            for row in 0..arr.len() {
+                if arr.is_valid(row) {
+                    sum += arr.value(row);
+                }
+            }
+            self.sum_f64 = Some(sum);
+            self.count = count;
+            return;
+        }
+
+        // Preserve the first overflowing row's partial state.
         for i in 0..arr.len() {
             if arr.is_null(i) {
                 continue;
@@ -624,6 +644,56 @@ mod tests {
             "expected Float64(Some), got {out:?}"
         );
         Ok(())
+    }
+
+    #[test]
+    fn float_batch_state_matches_ordered_row_updates() {
+        let values = Float64Array::from(vec![
+            None,
+            Some(-0.0),
+            Some(0.0),
+            None,
+            Some(1e16),
+            Some(1.0),
+            Some(-1e16),
+            Some(f64::INFINITY),
+            Some(f64::NEG_INFINITY),
+            None,
+        ]);
+        for start in 0..=values.len() {
+            for end in start..=values.len() {
+                let batch = values.slice(start, end - start);
+                for (initial_count, initial_sum) in
+                    [(0, None), (1, Some(-0.0)), (i64::MAX - 1, Some(2.0))]
+                {
+                    let mut reference = TryAvgAccumulator::new(DataType::Float64);
+                    reference.count = initial_count;
+                    reference.sum_f64 = initial_sum;
+                    let mut candidate = reference.clone();
+
+                    for row in 0..batch.len() {
+                        if batch.is_null(row) {
+                            continue;
+                        }
+                        reference.sum_f64 =
+                            Some(reference.sum_f64.unwrap_or(0.0) + batch.value(row));
+                        reference.inc_count();
+                        if reference.failed {
+                            break;
+                        }
+                    }
+                    candidate.update_f64(&batch);
+
+                    assert_eq!(candidate.count, reference.count);
+                    assert_eq!(candidate.failed, reference.failed);
+                    assert_eq!(
+                        candidate.sum_f64.map(f64::to_bits),
+                        reference.sum_f64.map(f64::to_bits),
+                        "slice {start}..{end}, count {initial_count}",
+                    );
+                }
+            }
+        }
     }
 
     #[test]
