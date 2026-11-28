@@ -2621,6 +2621,17 @@ overflow Utf8 offsets retain the existing formatter. The
 differential uses the committed timestamp inputs across all
 three supported string array layouts.
 
+### Ordinary UTC localization for STRING TIMESTAMP LTZ (#1389)
+
+An ordinary whole-second STRING that passes the existing calendar
+and clock validation can convert directly to microseconds when
+the LTZ session zone is `UTC`. This removes the repeated UTC
+zone lookup and general localization work measured in the
+[Mac profile](benches/reports/timestamp-ltz-1389-macos-profile.md).
+Other zones, NTZ and the grammar fallback continue through their
+existing conversion. The committed timestamp corpus compares
+values and failures against the original parser.
+
 ### Ordinary STRING timestamp casts (#1389)
 
 SparkTimestamp LTZ/NTZ uses Chrono calendar and clock validation directly for

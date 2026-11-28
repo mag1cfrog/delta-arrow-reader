@@ -1,0 +1,1438 @@
+{
+  "routines": {
+    "native_query_builder": [
+      {
+        "staging_symbol": "__ZN9execution17create_query_plan28_$u7b$$u7b$closure$u7d$$u7d$17h695f8a5d1b21ff94E",
+        "candidate_symbol": "__ZN9execution17create_query_plan28_$u7b$$u7b$closure$u7d$$u7d$17h695f8a5d1b21ff94E",
+        "instructions": [
+          944,
+          944
+        ],
+        "normalized_sha256": [
+          "00b9629bba5cff293dbd49b598b504cc44f7524fc6a7824b88cee82010c7041e",
+          "00b9629bba5cff293dbd49b598b504cc44f7524fc6a7824b88cee82010c7041e"
+        ],
+        "entry_stack": [
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x430",
+            "str xzr, [sp]",
+            "add x22, sp, #0x160"
+          ],
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x430",
+            "str xzr, [sp]",
+            "add x22, sp, #0x160"
+          ]
+        ],
+        "normalizations": {
+          "import_stubs": 18,
+          "symbol_page_destinations": 2,
+          "equal_rebased_data_bytes_512": 4
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "timed_query_driver": [
+      {
+        "staging_symbol": "__ZN9execution13measure_query28_$u7b$$u7b$closure$u7d$$u7d$17h4f72ea3f409c9d44E",
+        "candidate_symbol": "__ZN9execution13measure_query28_$u7b$$u7b$closure$u7d$$u7d$17h4f72ea3f409c9d44E",
+        "instructions": [
+          2496,
+          2496
+        ],
+        "normalized_sha256": [
+          "0f6d57a58ff4193acb0d5a6438e7ccb1936b42039361006fd940b6e003230825",
+          "0f6d57a58ff4193acb0d5a6438e7ccb1936b42039361006fd940b6e003230825"
+        ],
+        "entry_stack": [
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x2c0",
+            "add x26, sp, #0x1a0"
+          ],
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x2c0",
+            "add x26, sp, #0x1a0"
+          ]
+        ],
+        "normalizations": {
+          "equal_rebased_data_bytes_512": 47,
+          "import_stubs": 6,
+          "symbol_page_destinations": 4,
+          "equal_readonly_constant_windows": 40,
+          "equal_loaded_bytes": 2
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "stream_drain_driver": [],
+    "native_sql_parse": [
+      {
+        "staging_symbol": "__ZN10datafusion9execution13session_state12SessionState16sql_to_statement17hf1554e1db511b292E",
+        "candidate_symbol": "__ZN10datafusion9execution13session_state12SessionState16sql_to_statement17hf1554e1db511b292E",
+        "instructions": [
+          356,
+          356
+        ],
+        "normalized_sha256": [
+          "e99b1ba8111185aed3c626d2e9429931785f9d7d29259e610736aae7d1419332",
+          "e99b1ba8111185aed3c626d2e9429931785f9d7d29259e610736aae7d1419332"
+        ],
+        "entry_stack": [
+          [
+            "stp x26, x25, [sp, #-0x50]!",
+            "stp x24, x23, [sp, #0x10]",
+            "stp x22, x21, [sp, #0x20]",
+            "stp x20, x19, [sp, #0x30]",
+            "stp x29, x30, [sp, #0x40]",
+            "add x29, sp, #0x40",
+            "sub sp, sp, #0x1e0",
+            "add x25, sp, #0x78",
+            "str x3, [sp, #0x8]"
+          ],
+          [
+            "stp x26, x25, [sp, #-0x50]!",
+            "stp x24, x23, [sp, #0x10]",
+            "stp x22, x21, [sp, #0x20]",
+            "stp x20, x19, [sp, #0x30]",
+            "stp x29, x30, [sp, #0x40]",
+            "add x29, sp, #0x40",
+            "sub sp, sp, #0x1e0",
+            "add x25, sp, #0x78",
+            "str x3, [sp, #0x8]"
+          ]
+        ],
+        "normalizations": {
+          "symbol_page_destinations": 4,
+          "equal_readonly_constant_windows": 3,
+          "equal_cstring_destinations": 3,
+          "equal_loaded_bytes": 3,
+          "import_stubs": 2
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "native_sql_lowering": [
+      {
+        "staging_symbol": "__ZN14datafusion_sql9statement60_$LT$impl$u20$datafusion_sql..planner..SqlToRel$LT$S$GT$$GT$17statement_to_plan17h5cadbb558b7ac639E",
+        "candidate_symbol": "__ZN14datafusion_sql9statement60_$LT$impl$u20$datafusion_sql..planner..SqlToRel$LT$S$GT$$GT$17statement_to_plan17h5cadbb558b7ac639E",
+        "instructions": [
+          2533,
+          2533
+        ],
+        "normalized_sha256": [
+          "f0007bd88d2ee12928cae6bee514cd93b5fce0406bf95689cd10f94a271e79ff",
+          "f0007bd88d2ee12928cae6bee514cd93b5fce0406bf95689cd10f94a271e79ff"
+        ],
+        "entry_stack": [
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x1, lsl #12",
+            "str xzr, [sp]",
+            "sub sp, sp, #0x660",
+            "str xzr, [sp]",
+            "add x20, sp, #0x1, lsl #12",
+            "add x21, sp, #0x1, lsl #12"
+          ],
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x1, lsl #12",
+            "str xzr, [sp]",
+            "sub sp, sp, #0x660",
+            "str xzr, [sp]",
+            "add x20, sp, #0x1, lsl #12",
+            "add x21, sp, #0x1, lsl #12"
+          ]
+        ],
+        "normalizations": {
+          "import_stubs": 18,
+          "equal_rebased_data_bytes_512": 3,
+          "equal_readonly_constant_windows": 5,
+          "equal_loaded_bytes": 3,
+          "symbol_page_destinations": 3,
+          "equal_cstring_destinations": 3
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "native_physical_plan": [
+      {
+        "staging_symbol": "__ZN10datafusion9dataframe9DataFrame20create_physical_plan28_$u7b$$u7b$closure$u7d$$u7d$17h6c4c05e58a2086c3E",
+        "candidate_symbol": "__ZN10datafusion9dataframe9DataFrame20create_physical_plan28_$u7b$$u7b$closure$u7d$$u7d$17h6c4c05e58a2086c3E",
+        "instructions": [
+          342,
+          342
+        ],
+        "normalized_sha256": [
+          "cc694eaa59096a16cdb92a23a5ab12f24c95b14563fdb9c6c9f49754e27aeabe",
+          "cc694eaa59096a16cdb92a23a5ab12f24c95b14563fdb9c6c9f49754e27aeabe"
+        ],
+        "entry_stack": [
+          [
+            "stp x28, x27, [sp, #-0x50]!",
+            "stp x24, x23, [sp, #0x10]",
+            "stp x22, x21, [sp, #0x20]",
+            "stp x20, x19, [sp, #0x30]",
+            "stp x29, x30, [sp, #0x40]",
+            "add x29, sp, #0x40",
+            "sub sp, sp, #0x2b0"
+          ],
+          [
+            "stp x28, x27, [sp, #-0x50]!",
+            "stp x24, x23, [sp, #0x10]",
+            "stp x22, x21, [sp, #0x20]",
+            "stp x20, x19, [sp, #0x30]",
+            "stp x29, x30, [sp, #0x40]",
+            "add x29, sp, #0x40",
+            "sub sp, sp, #0x2b0"
+          ]
+        ],
+        "normalizations": {
+          "import_stubs": 8,
+          "equal_rebased_data_bytes_512": 8
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "projection": [
+      {
+        "staging_symbol": "__ZN128_$LT$datafusion_physical_plan..projection..ProjectionExec$u20$as$u20$datafusion_physical_plan..execution_plan..ExecutionPlan$GT$7execute17h80a63d248eb151aaE",
+        "candidate_symbol": "__ZN128_$LT$datafusion_physical_plan..projection..ProjectionExec$u20$as$u20$datafusion_physical_plan..execution_plan..ExecutionPlan$GT$7execute17h80a63d248eb151aaE",
+        "instructions": [
+          4,
+          4
+        ],
+        "normalized_sha256": [
+          "8fdf98e01618dd3a5403c7cff6c2d800c6d0eec84d5c392c6683cc8f3f16703e",
+          "8fdf98e01618dd3a5403c7cff6c2d800c6d0eec84d5c392c6683cc8f3f16703e"
+        ],
+        "entry_stack": [
+          [],
+          []
+        ],
+        "normalizations": {},
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "projection_stream": [
+      {
+        "staging_symbol": "__ZN103_$LT$datafusion_physical_plan..projection..ProjectionStream$u20$as$u20$futures_core..stream..Stream$GT$9poll_next17h375351a666d4668eE",
+        "candidate_symbol": "__ZN103_$LT$datafusion_physical_plan..projection..ProjectionStream$u20$as$u20$futures_core..stream..Stream$GT$9poll_next17h375351a666d4668eE",
+        "instructions": [
+          210,
+          210
+        ],
+        "normalized_sha256": [
+          "7a936addf8f5beb3396e27e9882a5add095c30748acac24b81d7d6426c3abec1",
+          "7a936addf8f5beb3396e27e9882a5add095c30748acac24b81d7d6426c3abec1"
+        ],
+        "entry_stack": [
+          [
+            "sub sp, sp, #0x180",
+            "stp x24, x23, [sp, #0x140]",
+            "stp x22, x21, [sp, #0x150]",
+            "stp x20, x19, [sp, #0x160]",
+            "stp x29, x30, [sp, #0x170]",
+            "add x29, sp, #0x170",
+            "add x22, sp, #0x58"
+          ],
+          [
+            "sub sp, sp, #0x180",
+            "stp x24, x23, [sp, #0x140]",
+            "stp x22, x21, [sp, #0x150]",
+            "stp x20, x19, [sp, #0x160]",
+            "stp x29, x30, [sp, #0x170]",
+            "add x29, sp, #0x170",
+            "add x22, sp, #0x58"
+          ]
+        ],
+        "normalizations": {
+          "import_stubs": 1
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "projector": [
+      {
+        "staging_symbol": "__ZN24datafusion_physical_expr10projection9Projector13project_batch17hee673c75479c0072E",
+        "candidate_symbol": "__ZN24datafusion_physical_expr10projection9Projector13project_batch17hee673c75479c0072E",
+        "instructions": [
+          107,
+          107
+        ],
+        "normalized_sha256": [
+          "84aa75760d9270db6481f5681b7281775c63d07fd4972b37e9b40a876fe8abd1",
+          "84aa75760d9270db6481f5681b7281775c63d07fd4972b37e9b40a876fe8abd1"
+        ],
+        "entry_stack": [
+          [
+            "sub sp, sp, #0xf0",
+            "stp x20, x19, [sp, #0xd0]",
+            "stp x29, x30, [sp, #0xe0]",
+            "add x29, sp, #0xe0",
+            "str x11, [sp]",
+            "stp x11, x8, [sp, #0x58]"
+          ],
+          [
+            "sub sp, sp, #0xf0",
+            "stp x20, x19, [sp, #0xd0]",
+            "stp x29, x30, [sp, #0xe0]",
+            "add x29, sp, #0xe0",
+            "str x11, [sp]",
+            "stp x11, x8, [sp, #0x58]"
+          ]
+        ],
+        "normalizations": {},
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "case": [
+      {
+        "staging_symbol": "__ZN134_$LT$datafusion_physical_expr..expressions..case..CaseExpr$u20$as$u20$datafusion_physical_expr_common..physical_expr..PhysicalExpr$GT$8evaluate17h1c9b25f03315e43aE",
+        "candidate_symbol": "__ZN134_$LT$datafusion_physical_expr..expressions..case..CaseExpr$u20$as$u20$datafusion_physical_expr_common..physical_expr..PhysicalExpr$GT$8evaluate17h1c9b25f03315e43aE",
+        "instructions": [
+          2205,
+          2205
+        ],
+        "normalized_sha256": [
+          "a574feaf5cc039b1f8c3df0f3d91af96cf9111d84b0e300ffa5c2327139793c3",
+          "a574feaf5cc039b1f8c3df0f3d91af96cf9111d84b0e300ffa5c2327139793c3"
+        ],
+        "entry_stack": [
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x290",
+            "add x23, sp, #0xf0"
+          ],
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x290",
+            "add x23, sp, #0xf0"
+          ]
+        ],
+        "normalizations": {
+          "equal_rebased_data_bytes_512": 9,
+          "equal_readonly_constant_windows": 4,
+          "symbol_page_destinations": 3,
+          "equal_cstring_destinations": 3,
+          "import_stubs": 1
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "cast_expression": [
+      {
+        "staging_symbol": "__ZN134_$LT$datafusion_physical_expr..expressions..cast..CastExpr$u20$as$u20$datafusion_physical_expr_common..physical_expr..PhysicalExpr$GT$8evaluate17h51ecd8313593bbddE",
+        "candidate_symbol": "__ZN134_$LT$datafusion_physical_expr..expressions..cast..CastExpr$u20$as$u20$datafusion_physical_expr_common..physical_expr..PhysicalExpr$GT$8evaluate17h51ecd8313593bbddE",
+        "instructions": [
+          73,
+          73
+        ],
+        "normalized_sha256": [
+          "5f4faaa47587b348005b911026da2fb3f957a693993b55f6d3adc65c6eb1ceaa",
+          "5f4faaa47587b348005b911026da2fb3f957a693993b55f6d3adc65c6eb1ceaa"
+        ],
+        "entry_stack": [
+          [
+            "sub sp, sp, #0xb0",
+            "stp x24, x23, [sp, #0x70]",
+            "stp x22, x21, [sp, #0x80]",
+            "stp x20, x19, [sp, #0x90]",
+            "stp x29, x30, [sp, #0xa0]",
+            "add x29, sp, #0xa0",
+            "add x21, sp, #0x30",
+            "add x8, sp, #0x30"
+          ],
+          [
+            "sub sp, sp, #0xb0",
+            "stp x24, x23, [sp, #0x70]",
+            "stp x22, x21, [sp, #0x80]",
+            "stp x20, x19, [sp, #0x90]",
+            "stp x29, x30, [sp, #0xa0]",
+            "add x29, sp, #0xa0",
+            "add x21, sp, #0x30",
+            "add x8, sp, #0x30"
+          ]
+        ],
+        "normalizations": {
+          "import_stubs": 1
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      },
+      {
+        "staging_symbol": "__ZN141_$LT$datafusion_physical_expr..expressions..try_cast..TryCastExpr$u20$as$u20$datafusion_physical_expr_common..physical_expr..PhysicalExpr$GT$8evaluate17h9c2a28e5c7a51a47E",
+        "candidate_symbol": "__ZN141_$LT$datafusion_physical_expr..expressions..try_cast..TryCastExpr$u20$as$u20$datafusion_physical_expr_common..physical_expr..PhysicalExpr$GT$8evaluate17h9c2a28e5c7a51a47E",
+        "instructions": [
+          86,
+          86
+        ],
+        "normalized_sha256": [
+          "849f083318f6ec9df872136063800313abdbb6d9214aa504e8ae59f3180fa7a7",
+          "849f083318f6ec9df872136063800313abdbb6d9214aa504e8ae59f3180fa7a7"
+        ],
+        "entry_stack": [
+          [
+            "sub sp, sp, #0x130",
+            "stp x24, x23, [sp, #0xf0]",
+            "stp x22, x21, [sp, #0x100]",
+            "stp x20, x19, [sp, #0x110]",
+            "stp x29, x30, [sp, #0x120]",
+            "add x29, sp, #0x120",
+            "add x8, sp, #0x70",
+            "ldp x22, x21, [sp, #0x70]"
+          ],
+          [
+            "sub sp, sp, #0x130",
+            "stp x24, x23, [sp, #0xf0]",
+            "stp x22, x21, [sp, #0x100]",
+            "stp x20, x19, [sp, #0x110]",
+            "stp x29, x30, [sp, #0x120]",
+            "add x29, sp, #0x120",
+            "add x8, sp, #0x70",
+            "ldp x22, x21, [sp, #0x70]"
+          ]
+        ],
+        "normalizations": {
+          "symbol_page_destinations": 1,
+          "import_stubs": 1
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "concat": [
+      {
+        "staging_symbol": "__ZN104_$LT$datafusion_functions..string..concat..ConcatFunc$u20$as$u20$datafusion_expr..udf..ScalarUDFImpl$GT$16invoke_with_args17hee0763ca86f01407E",
+        "candidate_symbol": "__ZN104_$LT$datafusion_functions..string..concat..ConcatFunc$u20$as$u20$datafusion_expr..udf..ScalarUDFImpl$GT$16invoke_with_args17hee0763ca86f01407E",
+        "instructions": [
+          1703,
+          1703
+        ],
+        "normalized_sha256": [
+          "48e4a9c5e2a4a40ab106fb40278ca4c7a9af64aac15016a3b9af0014f5a09dd8",
+          "48e4a9c5e2a4a40ab106fb40278ca4c7a9af64aac15016a3b9af0014f5a09dd8"
+        ],
+        "entry_stack": [
+          [
+            "stp d9, d8, [sp, #-0x70]!",
+            "stp x28, x27, [sp, #0x10]",
+            "stp x26, x25, [sp, #0x20]",
+            "stp x24, x23, [sp, #0x30]",
+            "stp x22, x21, [sp, #0x40]",
+            "stp x20, x19, [sp, #0x50]",
+            "stp x29, x30, [sp, #0x60]",
+            "add x29, sp, #0x60",
+            "sub sp, sp, #0x2c0",
+            "stp x8, x1, [sp, #0x10]",
+            "str q0, [sp, #0x20]",
+            "str x28, [sp, #0x30]",
+            "ldr x22, [sp, #0x28]",
+            "add x8, sp, #0x38"
+          ],
+          [
+            "stp d9, d8, [sp, #-0x70]!",
+            "stp x28, x27, [sp, #0x10]",
+            "stp x26, x25, [sp, #0x20]",
+            "stp x24, x23, [sp, #0x30]",
+            "stp x22, x21, [sp, #0x40]",
+            "stp x20, x19, [sp, #0x50]",
+            "stp x29, x30, [sp, #0x60]",
+            "add x29, sp, #0x60",
+            "sub sp, sp, #0x2c0",
+            "stp x8, x1, [sp, #0x10]",
+            "str q0, [sp, #0x20]",
+            "str x28, [sp, #0x30]",
+            "ldr x22, [sp, #0x28]",
+            "add x8, sp, #0x38"
+          ]
+        ],
+        "normalizations": {
+          "equal_readonly_constant_windows": 5,
+          "equal_rebased_data_bytes_512": 9,
+          "import_stubs": 3,
+          "symbol_page_destinations": 9,
+          "equal_cstring_destinations": 9
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "scalar_expression": [
+      {
+        "staging_symbol": "__ZN142_$LT$datafusion_physical_expr..scalar_function..ScalarFunctionExpr$u20$as$u20$datafusion_physical_expr_common..physical_expr..PhysicalExpr$GT$8evaluate17hfd15d3f203eb411bE",
+        "candidate_symbol": "__ZN142_$LT$datafusion_physical_expr..scalar_function..ScalarFunctionExpr$u20$as$u20$datafusion_physical_expr_common..physical_expr..PhysicalExpr$GT$8evaluate17hfd15d3f203eb411bE",
+        "instructions": [
+          90,
+          90
+        ],
+        "normalized_sha256": [
+          "95e97f1f63e46c597a397cf71116ac5450464f2c1d60fdc9f6504e2e6bd222a5",
+          "95e97f1f63e46c597a397cf71116ac5450464f2c1d60fdc9f6504e2e6bd222a5"
+        ],
+        "entry_stack": [
+          [
+            "sub sp, sp, #0x170",
+            "stp x20, x19, [sp, #0x150]",
+            "stp x29, x30, [sp, #0x160]",
+            "add x29, sp, #0x160"
+          ],
+          [
+            "sub sp, sp, #0x170",
+            "stp x20, x19, [sp, #0x150]",
+            "stp x29, x30, [sp, #0x160]",
+            "add x29, sp, #0x160"
+          ]
+        ],
+        "normalizations": {},
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "remainder": [
+      {
+        "staging_symbol": "__ZN138_$LT$datafusion_physical_expr..expressions..binary..BinaryExpr$u20$as$u20$datafusion_physical_expr_common..physical_expr..PhysicalExpr$GT$8evaluate17h5e6c40371985964cE",
+        "candidate_symbol": "__ZN138_$LT$datafusion_physical_expr..expressions..binary..BinaryExpr$u20$as$u20$datafusion_physical_expr_common..physical_expr..PhysicalExpr$GT$8evaluate17h5e6c40371985964cE",
+        "instructions": [
+          1057,
+          1057
+        ],
+        "normalized_sha256": [
+          "8e00b461df872ad2cbebc13624d3f59c7c0d651a5e9bdc17ccb980dfac2e94ae",
+          "8e00b461df872ad2cbebc13624d3f59c7c0d651a5e9bdc17ccb980dfac2e94ae"
+        ],
+        "entry_stack": [
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x260"
+          ],
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x260"
+          ]
+        ],
+        "normalizations": {
+          "equal_readonly_constant_windows": 8,
+          "symbol_page_destinations": 2,
+          "import_stubs": 1
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "arrow_cast": [
+      {
+        "staging_symbol": "__ZN10arrow_cast4cast4cast17hfc6182e100d85230E",
+        "candidate_symbol": "__ZN10arrow_cast4cast4cast17hfc6182e100d85230E",
+        "instructions": [
+          19,
+          19
+        ],
+        "normalized_sha256": [
+          "b0460f32e1fa067c7f4e286f167b65ba835bb210e3097388ebd440d7ba3a4df5",
+          "b0460f32e1fa067c7f4e286f167b65ba835bb210e3097388ebd440d7ba3a4df5"
+        ],
+        "entry_stack": [
+          [
+            "sub sp, sp, #0x90",
+            "stp x29, x30, [sp, #0x80]",
+            "add x29, sp, #0x80",
+            "strb w9, [sp, #0x78]",
+            "str xzr, [sp]",
+            "str xzr, [sp, #0x10]",
+            "str xzr, [sp, #0x20]",
+            "str xzr, [sp, #0x30]",
+            "str xzr, [sp, #0x40]",
+            "str xzr, [sp, #0x50]",
+            "stp x9, xzr, [sp, #0x60]",
+            "str s0, [sp, #0x70]",
+            "mov x3, sp",
+            "ldp x29, x30, [sp, #0x80]",
+            "add sp, sp, #0x90"
+          ],
+          [
+            "sub sp, sp, #0x90",
+            "stp x29, x30, [sp, #0x80]",
+            "add x29, sp, #0x80",
+            "strb w9, [sp, #0x78]",
+            "str xzr, [sp]",
+            "str xzr, [sp, #0x10]",
+            "str xzr, [sp, #0x20]",
+            "str xzr, [sp, #0x30]",
+            "str xzr, [sp, #0x40]",
+            "str xzr, [sp, #0x50]",
+            "stp x9, xzr, [sp, #0x60]",
+            "str s0, [sp, #0x70]",
+            "mov x3, sp",
+            "ldp x29, x30, [sp, #0x80]",
+            "add sp, sp, #0x90"
+          ]
+        ],
+        "normalizations": {},
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "arrow_cast_dispatch": [
+      {
+        "staging_symbol": "__ZN10arrow_cast4cast17cast_with_options17hdc6ac2fc77898b54E",
+        "candidate_symbol": "__ZN10arrow_cast4cast17cast_with_options17hdc6ac2fc77898b54E",
+        "instructions": [
+          7193,
+          7193
+        ],
+        "normalized_sha256": [
+          "84cdd5527f4c4dd6f5cfd5cdc5a7e915ec9035b97508eafdae3e0a629369b55c",
+          "84cdd5527f4c4dd6f5cfd5cdc5a7e915ec9035b97508eafdae3e0a629369b55c"
+        ],
+        "entry_stack": [
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x4a0",
+            "str xzr, [sp]",
+            "str x2, [sp]"
+          ],
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x4a0",
+            "str xzr, [sp]",
+            "str x2, [sp]"
+          ]
+        ],
+        "normalizations": {
+          "symbol_page_destinations": 23,
+          "equal_cstring_destinations": 18,
+          "equal_readonly_constant_windows": 41,
+          "equal_rebased_data_bytes_512": 41,
+          "equal_loaded_bytes": 1,
+          "import_stubs": 1
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "arrow_view_timestamp": [
+      {
+        "staging_symbol": "__ZN10arrow_cast4cast6string22cast_view_to_timestamp17h085abb25363c5eb3E",
+        "candidate_symbol": "__ZN10arrow_cast4cast6string22cast_view_to_timestamp17h085abb25363c5eb3E",
+        "instructions": [
+          1278,
+          1278
+        ],
+        "normalized_sha256": [
+          "7bb62371f376bbd7e48fe064608e18592407267a18ee0d861b643b6707efcbe2",
+          "7bb62371f376bbd7e48fe064608e18592407267a18ee0d861b643b6707efcbe2"
+        ],
+        "entry_stack": [
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x2b0",
+            "add x8, sp, #0xf0"
+          ],
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x2b0",
+            "add x8, sp, #0xf0"
+          ]
+        ],
+        "normalizations": {
+          "equal_rebased_data_bytes_512": 17,
+          "equal_readonly_constant_windows": 12,
+          "symbol_page_destinations": 10,
+          "import_stubs": 2
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      },
+      {
+        "staging_symbol": "__ZN10arrow_cast4cast6string22cast_view_to_timestamp17h6bd9a44119994495E",
+        "candidate_symbol": "__ZN10arrow_cast4cast6string22cast_view_to_timestamp17h6bd9a44119994495E",
+        "instructions": [
+          1278,
+          1278
+        ],
+        "normalized_sha256": [
+          "0f590d79eefee7fdcf3c70a56a21c7d827edd04d55f13fa0c3c75bd567031973",
+          "0f590d79eefee7fdcf3c70a56a21c7d827edd04d55f13fa0c3c75bd567031973"
+        ],
+        "entry_stack": [
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x2b0",
+            "add x8, sp, #0xf0"
+          ],
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x2b0",
+            "add x8, sp, #0xf0"
+          ]
+        ],
+        "normalizations": {
+          "equal_rebased_data_bytes_512": 17,
+          "equal_readonly_constant_windows": 12,
+          "symbol_page_destinations": 10,
+          "import_stubs": 2
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      },
+      {
+        "staging_symbol": "__ZN10arrow_cast4cast6string22cast_view_to_timestamp17h89914e92ca2541b0E",
+        "candidate_symbol": "__ZN10arrow_cast4cast6string22cast_view_to_timestamp17h89914e92ca2541b0E",
+        "instructions": [
+          1278,
+          1278
+        ],
+        "normalized_sha256": [
+          "5ae039f1a4bd3d9096b06eec98f561783e8e958eec0c185cab4859b6eeeecd1a",
+          "5ae039f1a4bd3d9096b06eec98f561783e8e958eec0c185cab4859b6eeeecd1a"
+        ],
+        "entry_stack": [
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x2b0",
+            "add x8, sp, #0xf0"
+          ],
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x2b0",
+            "add x8, sp, #0xf0"
+          ]
+        ],
+        "normalizations": {
+          "equal_rebased_data_bytes_512": 17,
+          "equal_readonly_constant_windows": 12,
+          "symbol_page_destinations": 10,
+          "import_stubs": 2
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      },
+      {
+        "staging_symbol": "__ZN10arrow_cast4cast6string22cast_view_to_timestamp17hb3b013a4af18b0cbE",
+        "candidate_symbol": "__ZN10arrow_cast4cast6string22cast_view_to_timestamp17hb3b013a4af18b0cbE",
+        "instructions": [
+          1278,
+          1278
+        ],
+        "normalized_sha256": [
+          "06fd7a055d4628e1b5cc570c31390567357b9ecfefbb6367508a907fe08c2785",
+          "06fd7a055d4628e1b5cc570c31390567357b9ecfefbb6367508a907fe08c2785"
+        ],
+        "entry_stack": [
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x2b0",
+            "add x8, sp, #0xf0"
+          ],
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x2b0",
+            "add x8, sp, #0xf0"
+          ]
+        ],
+        "normalizations": {
+          "equal_rebased_data_bytes_512": 17,
+          "equal_readonly_constant_windows": 12,
+          "symbol_page_destinations": 10,
+          "import_stubs": 2
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "arrow_timestamp_fields": [
+      {
+        "staging_symbol": "__ZN10arrow_cast5parse18string_to_datetime17h0353d736284632f6E",
+        "candidate_symbol": "__ZN10arrow_cast5parse18string_to_datetime17h0353d736284632f6E",
+        "instructions": [
+          286,
+          286
+        ],
+        "normalized_sha256": [
+          "86e8916583c5b2f00fa13839d4c1af262eceeef710d40a275c45cfcea4d092a7",
+          "86e8916583c5b2f00fa13839d4c1af262eceeef710d40a275c45cfcea4d092a7"
+        ],
+        "entry_stack": [
+          [
+            "sub sp, sp, #0x150",
+            "stp x24, x23, [sp, #0x110]",
+            "stp x22, x21, [sp, #0x120]",
+            "stp x20, x19, [sp, #0x130]",
+            "stp x29, x30, [sp, #0x140]",
+            "add x29, sp, #0x140",
+            "stp x1, x2, [sp, #0x8]",
+            "add x8, sp, #0x8",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17h1307ca48ab1b8a7bE)"
+          ],
+          [
+            "sub sp, sp, #0x150",
+            "stp x24, x23, [sp, #0x110]",
+            "stp x22, x21, [sp, #0x120]",
+            "stp x20, x19, [sp, #0x130]",
+            "stp x29, x30, [sp, #0x140]",
+            "add x29, sp, #0x140",
+            "stp x1, x2, [sp, #0x8]",
+            "add x8, sp, #0x8",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17h1307ca48ab1b8a7bE)"
+          ]
+        ],
+        "normalizations": {
+          "equal_readonly_constant_windows": 6,
+          "symbol_page_destinations": 6,
+          "equal_cstring_destinations": 6,
+          "equal_rebased_data_bytes_512": 1
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      },
+      {
+        "staging_symbol": "__ZN10arrow_cast5parse18string_to_datetime17h04f63cb943c8e7f6E",
+        "candidate_symbol": "__ZN10arrow_cast5parse18string_to_datetime17h04f63cb943c8e7f6E",
+        "instructions": [
+          352,
+          352
+        ],
+        "normalized_sha256": [
+          "dba2bd452f7f64fb0892ad1f951c2e39d7ebb09121c3dfeef2d897d1d4f21f59",
+          "dba2bd452f7f64fb0892ad1f951c2e39d7ebb09121c3dfeef2d897d1d4f21f59"
+        ],
+        "entry_stack": [
+          [
+            "sub sp, sp, #0x160",
+            "stp x28, x27, [sp, #0x110]",
+            "stp x24, x23, [sp, #0x120]",
+            "stp x22, x21, [sp, #0x130]",
+            "stp x20, x19, [sp, #0x140]",
+            "stp x29, x30, [sp, #0x150]",
+            "add x29, sp, #0x150",
+            "stp x1, x2, [sp, #0x8]",
+            "add x8, sp, #0x8",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17hb73aad8e7d29a960E)"
+          ],
+          [
+            "sub sp, sp, #0x160",
+            "stp x28, x27, [sp, #0x110]",
+            "stp x24, x23, [sp, #0x120]",
+            "stp x22, x21, [sp, #0x130]",
+            "stp x20, x19, [sp, #0x140]",
+            "stp x29, x30, [sp, #0x150]",
+            "add x29, sp, #0x150",
+            "stp x1, x2, [sp, #0x8]",
+            "add x8, sp, #0x8",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17hb73aad8e7d29a960E)"
+          ]
+        ],
+        "normalizations": {
+          "equal_readonly_constant_windows": 7,
+          "symbol_page_destinations": 7,
+          "equal_cstring_destinations": 7,
+          "equal_rebased_data_bytes_512": 1
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      },
+      {
+        "staging_symbol": "__ZN10arrow_cast5parse18string_to_datetime17h056d5d6218289a9fE",
+        "candidate_symbol": "__ZN10arrow_cast5parse18string_to_datetime17h056d5d6218289a9fE",
+        "instructions": [
+          427,
+          427
+        ],
+        "normalized_sha256": [
+          "26d449947daf644a1c0d05850e09ab9abe11c721ccb14a3242a33e536ed0377d",
+          "26d449947daf644a1c0d05850e09ab9abe11c721ccb14a3242a33e536ed0377d"
+        ],
+        "entry_stack": [
+          [
+            "sub sp, sp, #0x150",
+            "stp x24, x23, [sp, #0x110]",
+            "stp x22, x21, [sp, #0x120]",
+            "stp x20, x19, [sp, #0x130]",
+            "stp x29, x30, [sp, #0x140]",
+            "add x29, sp, #0x140",
+            "stp x1, x2, [sp]",
+            "mov x8, sp",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17hcf8df4001fea8cb9E)"
+          ],
+          [
+            "sub sp, sp, #0x150",
+            "stp x24, x23, [sp, #0x110]",
+            "stp x22, x21, [sp, #0x120]",
+            "stp x20, x19, [sp, #0x130]",
+            "stp x29, x30, [sp, #0x140]",
+            "add x29, sp, #0x140",
+            "stp x1, x2, [sp]",
+            "mov x8, sp",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17hcf8df4001fea8cb9E)"
+          ]
+        ],
+        "normalizations": {
+          "equal_readonly_constant_windows": 6,
+          "symbol_page_destinations": 6,
+          "equal_cstring_destinations": 6,
+          "equal_loaded_bytes": 9,
+          "equal_rebased_data_bytes_512": 1
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      },
+      {
+        "staging_symbol": "__ZN10arrow_cast5parse18string_to_datetime17h5a62218da3348b0eE",
+        "candidate_symbol": "__ZN10arrow_cast5parse18string_to_datetime17h5a62218da3348b0eE",
+        "instructions": [
+          352,
+          352
+        ],
+        "normalized_sha256": [
+          "91cfa513f8604927ed3b760ae5c5202206fe161de6d057af74d39ddbe8425da2",
+          "91cfa513f8604927ed3b760ae5c5202206fe161de6d057af74d39ddbe8425da2"
+        ],
+        "entry_stack": [
+          [
+            "sub sp, sp, #0x160",
+            "stp x28, x27, [sp, #0x110]",
+            "stp x24, x23, [sp, #0x120]",
+            "stp x22, x21, [sp, #0x130]",
+            "stp x20, x19, [sp, #0x140]",
+            "stp x29, x30, [sp, #0x150]",
+            "add x29, sp, #0x150",
+            "stp x1, x2, [sp, #0x8]",
+            "add x8, sp, #0x8",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17hd42f07f98a8fef64E)"
+          ],
+          [
+            "sub sp, sp, #0x160",
+            "stp x28, x27, [sp, #0x110]",
+            "stp x24, x23, [sp, #0x120]",
+            "stp x22, x21, [sp, #0x130]",
+            "stp x20, x19, [sp, #0x140]",
+            "stp x29, x30, [sp, #0x150]",
+            "add x29, sp, #0x150",
+            "stp x1, x2, [sp, #0x8]",
+            "add x8, sp, #0x8",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17hd42f07f98a8fef64E)"
+          ]
+        ],
+        "normalizations": {
+          "equal_readonly_constant_windows": 7,
+          "symbol_page_destinations": 7,
+          "equal_cstring_destinations": 7,
+          "equal_rebased_data_bytes_512": 1
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      },
+      {
+        "staging_symbol": "__ZN10arrow_cast5parse18string_to_datetime17h8e2cd2642b4458d6E",
+        "candidate_symbol": "__ZN10arrow_cast5parse18string_to_datetime17h8e2cd2642b4458d6E",
+        "instructions": [
+          286,
+          286
+        ],
+        "normalized_sha256": [
+          "1420e743c2458d9820a0cfea5721db01e87ab23d747c63fbfd06789939e2d320",
+          "1420e743c2458d9820a0cfea5721db01e87ab23d747c63fbfd06789939e2d320"
+        ],
+        "entry_stack": [
+          [
+            "sub sp, sp, #0x150",
+            "stp x24, x23, [sp, #0x110]",
+            "stp x22, x21, [sp, #0x120]",
+            "stp x20, x19, [sp, #0x130]",
+            "stp x29, x30, [sp, #0x140]",
+            "add x29, sp, #0x140",
+            "stp x1, x2, [sp, #0x8]",
+            "add x8, sp, #0x8",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17h91ad22f486f9f1a9E)"
+          ],
+          [
+            "sub sp, sp, #0x150",
+            "stp x24, x23, [sp, #0x110]",
+            "stp x22, x21, [sp, #0x120]",
+            "stp x20, x19, [sp, #0x130]",
+            "stp x29, x30, [sp, #0x140]",
+            "add x29, sp, #0x140",
+            "stp x1, x2, [sp, #0x8]",
+            "add x8, sp, #0x8",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17h91ad22f486f9f1a9E)"
+          ]
+        ],
+        "normalizations": {
+          "equal_readonly_constant_windows": 6,
+          "symbol_page_destinations": 6,
+          "equal_cstring_destinations": 6,
+          "equal_rebased_data_bytes_512": 1
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      },
+      {
+        "staging_symbol": "__ZN10arrow_cast5parse18string_to_datetime17haaa8c16c04d9feb6E",
+        "candidate_symbol": "__ZN10arrow_cast5parse18string_to_datetime17haaa8c16c04d9feb6E",
+        "instructions": [
+          352,
+          352
+        ],
+        "normalized_sha256": [
+          "a2a97684954687d19787def4202f33804c1e05778f3f40152d4923e2740574e8",
+          "a2a97684954687d19787def4202f33804c1e05778f3f40152d4923e2740574e8"
+        ],
+        "entry_stack": [
+          [
+            "sub sp, sp, #0x160",
+            "stp x28, x27, [sp, #0x110]",
+            "stp x24, x23, [sp, #0x120]",
+            "stp x22, x21, [sp, #0x130]",
+            "stp x20, x19, [sp, #0x140]",
+            "stp x29, x30, [sp, #0x150]",
+            "add x29, sp, #0x150",
+            "stp x1, x2, [sp, #0x8]",
+            "add x8, sp, #0x8",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17h91ad22f486f9f1a9E)"
+          ],
+          [
+            "sub sp, sp, #0x160",
+            "stp x28, x27, [sp, #0x110]",
+            "stp x24, x23, [sp, #0x120]",
+            "stp x22, x21, [sp, #0x130]",
+            "stp x20, x19, [sp, #0x140]",
+            "stp x29, x30, [sp, #0x150]",
+            "add x29, sp, #0x150",
+            "stp x1, x2, [sp, #0x8]",
+            "add x8, sp, #0x8",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17h91ad22f486f9f1a9E)"
+          ]
+        ],
+        "normalizations": {
+          "equal_readonly_constant_windows": 7,
+          "symbol_page_destinations": 7,
+          "equal_cstring_destinations": 7,
+          "equal_rebased_data_bytes_512": 1
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      },
+      {
+        "staging_symbol": "__ZN10arrow_cast5parse18string_to_datetime17hfa6dc571bcbb9c77E",
+        "candidate_symbol": "__ZN10arrow_cast5parse18string_to_datetime17hfa6dc571bcbb9c77E",
+        "instructions": [
+          286,
+          286
+        ],
+        "normalized_sha256": [
+          "aa6a11ac0b921df2209ee246df3adc73c88f3ba85d43f2d4ca282e3d3ca0e7d1",
+          "aa6a11ac0b921df2209ee246df3adc73c88f3ba85d43f2d4ca282e3d3ca0e7d1"
+        ],
+        "entry_stack": [
+          [
+            "sub sp, sp, #0x150",
+            "stp x24, x23, [sp, #0x110]",
+            "stp x22, x21, [sp, #0x120]",
+            "stp x20, x19, [sp, #0x130]",
+            "stp x29, x30, [sp, #0x140]",
+            "add x29, sp, #0x140",
+            "stp x1, x2, [sp, #0x8]",
+            "add x8, sp, #0x8",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17hb73aad8e7d29a960E)"
+          ],
+          [
+            "sub sp, sp, #0x150",
+            "stp x24, x23, [sp, #0x110]",
+            "stp x22, x21, [sp, #0x120]",
+            "stp x20, x19, [sp, #0x130]",
+            "stp x29, x30, [sp, #0x140]",
+            "add x29, sp, #0x140",
+            "stp x1, x2, [sp, #0x8]",
+            "add x8, sp, #0x8",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17hb73aad8e7d29a960E)"
+          ]
+        ],
+        "normalizations": {
+          "equal_readonly_constant_windows": 6,
+          "symbol_page_destinations": 6,
+          "equal_cstring_destinations": 6,
+          "equal_rebased_data_bytes_512": 1
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      },
+      {
+        "staging_symbol": "__ZN10arrow_cast5parse18string_to_datetime17hfc7e9138221c85cfE",
+        "candidate_symbol": "__ZN10arrow_cast5parse18string_to_datetime17hfc7e9138221c85cfE",
+        "instructions": [
+          484,
+          484
+        ],
+        "normalized_sha256": [
+          "1db9c64648981f890ccda7695add45eef31a373887ce60af4e0aeeafbb6a3e91",
+          "1db9c64648981f890ccda7695add45eef31a373887ce60af4e0aeeafbb6a3e91"
+        ],
+        "entry_stack": [
+          [
+            "sub sp, sp, #0x160",
+            "stp x28, x27, [sp, #0x110]",
+            "stp x24, x23, [sp, #0x120]",
+            "stp x22, x21, [sp, #0x130]",
+            "stp x20, x19, [sp, #0x140]",
+            "stp x29, x30, [sp, #0x150]",
+            "add x29, sp, #0x150",
+            "stp x1, x2, [sp]",
+            "mov x8, sp",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17hcf8df4001fea8cb9E)"
+          ],
+          [
+            "sub sp, sp, #0x160",
+            "stp x28, x27, [sp, #0x110]",
+            "stp x24, x23, [sp, #0x120]",
+            "stp x22, x21, [sp, #0x130]",
+            "stp x20, x19, [sp, #0x140]",
+            "stp x29, x30, [sp, #0x150]",
+            "add x29, sp, #0x150",
+            "stp x1, x2, [sp]",
+            "mov x8, sp",
+            "add x9, x9, symbol(__ZN44_$LT$$RF$T$u20$as$u20$core..fmt..Display$GT$3fmt17hcf8df4001fea8cb9E)"
+          ]
+        ],
+        "normalizations": {
+          "equal_readonly_constant_windows": 7,
+          "symbol_page_destinations": 7,
+          "equal_cstring_destinations": 6,
+          "equal_loaded_bytes": 9,
+          "equal_rebased_data_bytes_512": 1
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "delta_scan": [
+      {
+        "staging_symbol": "__ZN140_$LT$delta_arrow_reader..reader..datafusion..execution..DeltaScanExec$u20$as$u20$datafusion_physical_plan..execution_plan..ExecutionPlan$GT$7execute17hdf9c9ee201e0c9aaE",
+        "candidate_symbol": "__ZN140_$LT$delta_arrow_reader..reader..datafusion..execution..DeltaScanExec$u20$as$u20$datafusion_physical_plan..execution_plan..ExecutionPlan$GT$7execute17hdf9c9ee201e0c9aaE",
+        "instructions": [
+          616,
+          616
+        ],
+        "normalized_sha256": [
+          "2804ad769f278ef14adc1312fcc644ea8e2543f20f22052e5e80205413128d72",
+          "2804ad769f278ef14adc1312fcc644ea8e2543f20f22052e5e80205413128d72"
+        ],
+        "entry_stack": [
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x3e0",
+            "str x2, [sp, #0x10]",
+            "str x0, [sp, #0x18]",
+            "add x8, sp, #0x170"
+          ],
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x3e0",
+            "str x2, [sp, #0x10]",
+            "str x0, [sp, #0x18]",
+            "add x8, sp, #0x170"
+          ]
+        ],
+        "normalizations": {
+          "symbol_page_destinations": 4,
+          "equal_rebased_data_bytes_512": 3,
+          "equal_readonly_constant_windows": 1,
+          "import_stubs": 3,
+          "equal_rebased_data_bytes_488": 1
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ],
+    "parquet_stream": [
+      {
+        "staging_symbol": "__ZN112_$LT$parquet..arrow..async_reader..ParquetRecordBatchStream$LT$T$GT$$u20$as$u20$futures_core..stream..Stream$GT$9poll_next17hd63b5be536df04b0E",
+        "candidate_symbol": "__ZN112_$LT$parquet..arrow..async_reader..ParquetRecordBatchStream$LT$T$GT$$u20$as$u20$futures_core..stream..Stream$GT$9poll_next17hd63b5be536df04b0E",
+        "instructions": [
+          461,
+          461
+        ],
+        "normalized_sha256": [
+          "e4e325ed0e165dc69912bc56dfdfec352a74ac785351c3d29c8b09e2b942eac5",
+          "e4e325ed0e165dc69912bc56dfdfec352a74ac785351c3d29c8b09e2b942eac5"
+        ],
+        "entry_stack": [
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x1a0",
+            "str x8, [sp]",
+            "add x27, sp, #0x80",
+            "add x22, sp, #0x8"
+          ],
+          [
+            "stp x28, x27, [sp, #-0x60]!",
+            "stp x26, x25, [sp, #0x10]",
+            "stp x24, x23, [sp, #0x20]",
+            "stp x22, x21, [sp, #0x30]",
+            "stp x20, x19, [sp, #0x40]",
+            "stp x29, x30, [sp, #0x50]",
+            "add x29, sp, #0x50",
+            "sub sp, sp, #0x1a0",
+            "str x8, [sp]",
+            "add x27, sp, #0x80",
+            "add x22, sp, #0x8"
+          ]
+        ],
+        "normalizations": {
+          "equal_rebased_data_bytes_512": 2,
+          "import_stubs": 6
+        },
+        "normalized_match": true,
+        "unresolved_operands": 0,
+        "operand_examples": [],
+        "status": "compared"
+      }
+    ]
+  },
+  "method": "Apple LLVM Mach-O arm64 disassembly removes instruction addresses and symbolizes calls and local branches. Normalize calls to the same Mach-O stub target. Normalize adjacent page/offset pairs only when the linked symbol, full C string, 4096 destination bytes in __TEXT,__const, or exact loaded bytes match. Resolve loader-declared rebases when comparing data-constant records, including their pointees, nested supertrait vtables and unchanged scalar fields. Retain all other operands, including stack and field offsets and unresolved linked page destinations.",
+  "disassembler": "Apple LLVM version 21.0.0",
+  "builds": [
+    {
+      "binaries": {
+        "execution": "3c53121c9ada7147fb6c76e2c5d70d037d7dd6524d1640c8188e1929925fff3e"
+      },
+      "overlays": {
+        "benches/execution.rs": "848d88eee299b81b7620dbe64abe0e340180aad1dec5fe049d604d2c69e708cd",
+        "benches/macos_1560_parsers.json": "e1dad860654f5ca67ea020efa2e0e7f88ec2f3e4cf30119eadafa69e3854b573"
+      },
+      "profile": "release",
+      "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+      "rustc": "1.96.0",
+      "source": "03e6d16d82581dc05a017f3c8bdc73ebff779fd0"
+    },
+    {
+      "binaries": {
+        "execution": "8dc22a9d72e2d4ea4819b716f2aba170763f79c1dd70bf535798b04faa8701b2"
+      },
+      "overlays": {
+        "benches/execution.rs": "848d88eee299b81b7620dbe64abe0e340180aad1dec5fe049d604d2c69e708cd",
+        "benches/macos_1560_parsers.json": "e1dad860654f5ca67ea020efa2e0e7f88ec2f3e4cf30119eadafa69e3854b573"
+      },
+      "profile": "release",
+      "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+      "rustc": "1.96.0",
+      "source": "4704f1880f9d159d861d20e23598969abc6f6fb3"
+    }
+  ],
+  "scope": "parsers/timestamp_ntz/native",
+  "same_plan": true,
+  "plan": "ProjectionExec: expr=[l_orderkey@0 as l_orderkey, l_linenumber@1 as l_linenumber, CAST(CASE WHEN l_orderkey@0 % 97 = 0 THEN NULL ELSE concat(CAST(l_shipdate@2 AS Utf8View),  12:34:56) END AS Timestamp(\u00b5s)) as result]\n  DeltaScanExec: snapshot_version=0, partitions=2\n",
+  "arm64_routines": 30,
+  "normalized_instructions": 28432,
+  "decision": "build-layout shift",
+  "drain_driver": "No separate symbol in either executable. The timed query driver includes its stream drain loop.",
+  "state_layout": "Equal stack and object field operands and 203 equal rebased data record operands, including unchanged scalar fields and resolved pointees."
+}

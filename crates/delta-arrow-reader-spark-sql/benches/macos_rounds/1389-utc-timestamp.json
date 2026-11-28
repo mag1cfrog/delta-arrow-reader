@@ -1,0 +1,48 @@
+{
+  "staging": "03e6d16d82581dc05a017f3c8bdc73ebff779fd0",
+  "staging_report_head": "a195f53a42136126579248f72b2acb8ba79a53d1",
+  "candidate": "4704f1880f9d159d861d20e23598969abc6f6fb3",
+  "changes_from_staging_build": [
+    "benches/macos_rounds/1389-date-format.json",
+    "benches/macos_rounds/1389-date-format.md",
+    "benches/macos_rounds/1389-ltz-profile.json",
+    "benches/macos_rounds/1389-ltz-profile.md",
+    "benches/macos_rounds/1389-ltz-profile.rs",
+    "benches/reports/date-format-1389-macos-comparisons.json",
+    "benches/reports/date-format-1389-macos-preflight.json",
+    "benches/reports/date-format-1389-macos-samples.jsonl.gz",
+    "benches/reports/date-format-1389-macos.md",
+    "benches/reports/timestamp-ltz-1389-macos-profile-comparisons.json",
+    "benches/reports/timestamp-ltz-1389-macos-profile-samples.jsonl.gz",
+    "benches/reports/timestamp-ltz-1389-macos-profile.md"
+  ],
+  "baseline_manifest_sha256": "edec91c39ef60e9710d6d33b1b407d8b4765522bf7e95e73f73d3ed3b5e05c81",
+  "schedule_sha256": "e317b6fc4dcd463a155a55b32b8c9b036eaa7419176ff0ed06a2b3e7252d4102",
+  "fixture_proof_sha256": "5566c3ea99b3ada9817cd640d0deea31832906fccea21ac7bfaf09e68de62b87",
+  "blocks": 9,
+  "max_seconds": 10800,
+  "metric": "query_complete_ns",
+  "targets": [
+    "timestamp_ltz"
+  ],
+  "statements": [
+    {
+      "suite": "parsers",
+      "id": "timestamp_ltz",
+      "configurations": [
+        "native",
+        "spark-off",
+        "spark-on"
+      ]
+    },
+    {
+      "suite": "parsers",
+      "id": "timestamp_ntz",
+      "configurations": [
+        "native",
+        "spark-off",
+        "spark-on"
+      ]
+    }
+  ]
+}
