@@ -1,0 +1,60 @@
+{
+  "staging": "4704f1880f9d159d861d20e23598969abc6f6fb3",
+  "staging_report_head": "2dbc57fda7d700ec7b53affde231b14f07b1cfd9",
+  "candidate": "c86461baa3e9e17b3d4f5ae8c1a998fc8d6e1abe",
+  "changes_from_staging_build": [
+    "benches/macos_rounds/1389-date-cast-profile.json",
+    "benches/macos_rounds/1389-date-cast-profile.md",
+    "benches/macos_rounds/1389-date-cast-profile.rs",
+    "benches/macos_rounds/1389-utc-timestamp.json",
+    "benches/macos_rounds/1389-utc-timestamp.md",
+    "benches/reports/date-cast-1389-macos-profile-comparisons.json",
+    "benches/reports/date-cast-1389-macos-profile-samples.jsonl.gz",
+    "benches/reports/date-cast-1389-macos-profile.md",
+    "benches/reports/timestamp-1389-macos-utc-comparisons.json",
+    "benches/reports/timestamp-1389-macos-utc-layout.json",
+    "benches/reports/timestamp-1389-macos-utc-preflight.json",
+    "benches/reports/timestamp-1389-macos-utc-samples.jsonl.gz",
+    "benches/reports/timestamp-1389-macos-utc.md"
+  ],
+  "baseline_manifest_sha256": "edec91c39ef60e9710d6d33b1b407d8b4765522bf7e95e73f73d3ed3b5e05c81",
+  "schedule_sha256": "e317b6fc4dcd463a155a55b32b8c9b036eaa7419176ff0ed06a2b3e7252d4102",
+  "fixture_proof_sha256": "5566c3ea99b3ada9817cd640d0deea31832906fccea21ac7bfaf09e68de62b87",
+  "date_cast_manifest_sha256": "7b254a1f5b2138cdb5ed4e19a845542baaf3776a45e6c43e16792c98b7201836",
+  "blocks": 9,
+  "max_seconds": 10800,
+  "metric": "query_complete_ns",
+  "targets": [
+    "date_fallback",
+    "cast_date"
+  ],
+  "statements": [
+    {
+      "suite": "parsers",
+      "id": "date_fallback",
+      "configurations": [
+        "native",
+        "spark-off",
+        "spark-on"
+      ]
+    },
+    {
+      "suite": "casts-date",
+      "id": "cast_date",
+      "configurations": [
+        "native",
+        "spark-off",
+        "spark-on"
+      ]
+    }
+  ],
+  "mixed_date_control": {
+    "suite": "casts-date",
+    "id": "cast_strings",
+    "configurations": [
+      "native",
+      "spark-off",
+      "spark-on"
+    ]
+  }
+}

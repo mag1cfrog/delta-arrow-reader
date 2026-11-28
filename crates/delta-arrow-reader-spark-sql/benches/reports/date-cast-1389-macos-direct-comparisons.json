@@ -1,0 +1,129 @@
+{
+  "process_status": {
+    "ok": 324
+  },
+  "retained": 1620,
+  "excluded": {},
+  "comparisons": {
+    "parsers/date_fallback/native": {
+      "status": "ok",
+      "before": 335983250,
+      "after": 328679000,
+      "delta": -7498625,
+      "floor": 4850417.0,
+      "decision": "faster"
+    },
+    "parsers/date_fallback/spark-off": {
+      "status": "ok",
+      "before": 355002750,
+      "after": 342231667,
+      "delta": -12500166,
+      "floor": 3362042.0,
+      "decision": "faster"
+    },
+    "parsers/date_fallback/spark-on": {
+      "status": "ok",
+      "before": 353312125,
+      "after": 340424959,
+      "delta": -13191333,
+      "floor": 3346104.0,
+      "decision": "faster"
+    },
+    "casts-date/cast_date/native": {
+      "status": "ok",
+      "before": 211657791,
+      "after": 212105125,
+      "delta": 341417,
+      "floor": 1502354.0,
+      "decision": "within floor"
+    },
+    "casts-date/cast_date/spark-off": {
+      "status": "ok",
+      "before": 219647625,
+      "after": 214915375,
+      "delta": -4732250,
+      "floor": 1286687.0,
+      "decision": "faster"
+    },
+    "casts-date/cast_date/spark-on": {
+      "status": "ok",
+      "before": 219492958,
+      "after": 214688083,
+      "delta": -4599501,
+      "floor": 1176624.5,
+      "decision": "faster"
+    },
+    "casts-date/cast_strings/native": {
+      "status": "ok",
+      "before": 843886667,
+      "after": 845322917,
+      "delta": 663333,
+      "floor": 2489812.0,
+      "decision": "within floor"
+    },
+    "casts-date/cast_strings/spark-off": {
+      "status": "ok",
+      "before": 856358583,
+      "after": 849035458,
+      "delta": -6177041,
+      "floor": 11248333.5,
+      "decision": "within floor"
+    },
+    "casts-date/cast_strings/spark-on": {
+      "status": "ok",
+      "before": 856875500,
+      "after": 850096209,
+      "delta": -4631917,
+      "floor": 3169187.5,
+      "decision": "faster"
+    }
+  },
+  "references": {
+    "parsers/date_fallback/spark-off": {
+      "reference": "parsers/date_fallback/native",
+      "before_ns": 19248334,
+      "after_ns": 13871708,
+      "floor_ns": 7543063.0,
+      "rows": 6001215
+    },
+    "parsers/date_fallback/spark-on": {
+      "reference": "parsers/date_fallback/native",
+      "before_ns": 17590209,
+      "after_ns": 12979667,
+      "floor_ns": 4168896.0,
+      "rows": 6001215
+    },
+    "casts-date/cast_date/spark-off": {
+      "reference": "casts-date/cast_date/native",
+      "before_ns": 7985291,
+      "after_ns": 2667333,
+      "floor_ns": 1979395.5,
+      "rows": 6001215
+    },
+    "casts-date/cast_date/spark-on": {
+      "reference": "casts-date/cast_date/native",
+      "before_ns": 8076624,
+      "after_ns": 2502625,
+      "floor_ns": 1604145.5,
+      "rows": 6001215
+    },
+    "casts-date/cast_strings/spark-off": {
+      "reference": "casts-date/cast_strings/native",
+      "before_ns": 10912792,
+      "after_ns": 3712541,
+      "floor_ns": 12858021.0,
+      "rows": 6001215
+    },
+    "casts-date/cast_strings/spark-on": {
+      "reference": "casts-date/cast_strings/native",
+      "before_ns": 11062124,
+      "after_ns": 5301999,
+      "floor_ns": 3392645.5,
+      "rows": 6001215
+    }
+  },
+  "retained_samples_per_process": {
+    "parsers": 9,
+    "casts-date": 3
+  }
+}

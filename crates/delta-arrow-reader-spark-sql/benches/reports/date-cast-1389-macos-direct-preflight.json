@@ -1,0 +1,1155 @@
+{
+  "builds": [
+    {
+      "binaries": {
+        "execution": "8dc22a9d72e2d4ea4819b716f2aba170763f79c1dd70bf535798b04faa8701b2"
+      },
+      "overlays": {
+        "benches/execution.rs": "848d88eee299b81b7620dbe64abe0e340180aad1dec5fe049d604d2c69e708cd",
+        "benches/macos_1560_parsers.json": "e1dad860654f5ca67ea020efa2e0e7f88ec2f3e4cf30119eadafa69e3854b573"
+      },
+      "profile": "release",
+      "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+      "rustc": "1.96.0",
+      "source": "4704f1880f9d159d861d20e23598969abc6f6fb3"
+    },
+    {
+      "binaries": {
+        "execution": "89e2e6aefa43b8eb471ef6f1350c3ecc9a7346fc15c311c4dac4c959d031b1ed"
+      },
+      "overlays": {
+        "benches/execution.rs": "848d88eee299b81b7620dbe64abe0e340180aad1dec5fe049d604d2c69e708cd",
+        "benches/macos_1560_parsers.json": "e1dad860654f5ca67ea020efa2e0e7f88ec2f3e4cf30119eadafa69e3854b573"
+      },
+      "profile": "release",
+      "recipe_sha256": "dde74aa9d1bc6cdf49b1a8933af46f25b681390d2a47357d12ee4b38e2bcbae1",
+      "rustc": "1.96.0",
+      "source": "c86461baa3e9e17b3d4f5ae8c1a998fc8d6e1abe"
+    }
+  ],
+  "excluded": {},
+  "fixture_proof_sha256": "5566c3ea99b3ada9817cd640d0deea31832906fccea21ac7bfaf09e68de62b87",
+  "focused_differential": {
+    "arrow_calendar_comparisons": 16632,
+    "existing_and_added_tests": 3,
+    "existing_fixture_comparisons": 204,
+    "passed": true
+  },
+  "formatting_and_strict_root_package_clippy": "passed on c86461baa3e9e17b3d4f5ae8c1a998fc8d6e1abe",
+  "observed": {
+    "candidate": {
+      "casts-date/cast_date/native": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32"
+        ],
+        "configuration": "native",
+        "id": "cast_date",
+        "ipc_path": "EVIDENCE/candidate/casts-date/cast_date/native/result.arrow",
+        "ipc_sha256": "26858dbb6cce6ca12676e2a96cc51eb67a3cff15a68351cbc188ce6bd98b63d1",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[l_orderkey@0 as l_orderkey, l_linenumber@1 as l_linenumber, CAST(CAST(l_shipdate@2 AS Utf8View) AS Date32) as ship_date]\n  DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 150,
+          "ranges_sha256": "70cfca72e3c9db3f9d8ce8bcdfc18cb2cb0dcb557c2a90f14ca59c0555b7690b",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(138), parquet_data_file_exact_range_bytes_requested: Some(24633572), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(25585934), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 25585934,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 25585934,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "ship_date",
+              "type": "date"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "casts-date/cast_date/spark-off": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32"
+        ],
+        "configuration": "spark-off",
+        "id": "cast_date",
+        "ipc_path": "EVIDENCE/candidate/casts-date/cast_date/spark-off/result.arrow",
+        "ipc_sha256": "26858dbb6cce6ca12676e2a96cc51eb67a3cff15a68351cbc188ce6bd98b63d1",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[#89@0 as l_orderkey, #90@1 as l_linenumber, #91@2 as ship_date]\n  ProjectionExec: expr=[l_orderkey@0 as #89, l_linenumber@1 as #90, spark_result_metadata(spark_date(CAST(l_shipdate@2 AS Utf8View))) as #91]\n    DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 150,
+          "ranges_sha256": "3c9fedb1ac9c0f62ef58528645513531f391ef81567073bde92be3a15cb4d24c",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(138), parquet_data_file_exact_range_bytes_requested: Some(24633572), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(25585934), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 25585934,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 25585934,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "ship_date",
+              "type": "date"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "casts-date/cast_date/spark-on": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32"
+        ],
+        "configuration": "spark-on",
+        "id": "cast_date",
+        "ipc_path": "EVIDENCE/candidate/casts-date/cast_date/spark-on/result.arrow",
+        "ipc_sha256": "26858dbb6cce6ca12676e2a96cc51eb67a3cff15a68351cbc188ce6bd98b63d1",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[#89@0 as l_orderkey, #90@1 as l_linenumber, #91@2 as ship_date]\n  ProjectionExec: expr=[l_orderkey@0 as #89, l_linenumber@1 as #90, spark_result_metadata(spark_date(CAST(l_shipdate@2 AS Utf8View))) as #91]\n    DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 150,
+          "ranges_sha256": "3ed0323a5c2e4d80890045c11533301c001ef094f60dffd8d8a133b3536c9606",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(138), parquet_data_file_exact_range_bytes_requested: Some(24633572), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(25585934), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 25585934,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 25585934,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "ship_date",
+              "type": "date"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "casts-date/cast_strings/native": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32",
+          "Decimal128(15, 2)"
+        ],
+        "configuration": "native",
+        "id": "cast_strings",
+        "ipc_path": "EVIDENCE/candidate/casts-date/cast_strings/native/result.arrow",
+        "ipc_sha256": "110a6b167a3d0295da0a7ddf2cc5f0976d470ed918a7de26fbd25cbc7f2bdb82",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[l_orderkey@0 as l_orderkey, l_linenumber@1 as l_linenumber, CAST(CAST(l_shipdate@3 AS Utf8View) AS Date32) as ship_date, CAST(CAST(l_extendedprice@2 AS Utf8View) AS Decimal128(15, 2)) as price]\n  DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 196,
+          "ranges_sha256": "10a0fa0befc76d028b5f7d702dd254c5eb12c05956b006b5039cdf6226cd9f4a",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(184), parquet_data_file_exact_range_bytes_requested: Some(56199399), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(57151761), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 57151761,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 57151761,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "ship_date",
+              "type": "date"
+            },
+            {
+              "name": "price",
+              "type": "decimal(15,2)"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "casts-date/cast_strings/spark-off": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32",
+          "Decimal128(15, 2)"
+        ],
+        "configuration": "spark-off",
+        "id": "cast_strings",
+        "ipc_path": "EVIDENCE/candidate/casts-date/cast_strings/spark-off/result.arrow",
+        "ipc_sha256": "110a6b167a3d0295da0a7ddf2cc5f0976d470ed918a7de26fbd25cbc7f2bdb82",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[#89@0 as l_orderkey, #90@1 as l_linenumber, #91@2 as ship_date, #92@3 as price]\n  ProjectionExec: expr=[l_orderkey@0 as #89, l_linenumber@1 as #90, spark_result_metadata(spark_date(CAST(l_shipdate@3 AS Utf8View))) as #91, spark_result_metadata(spark_cast_string_to_decimal(CAST(l_extendedprice@2 AS Utf8View))) as #92]\n    DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 196,
+          "ranges_sha256": "574095cc07f932c594c877900a30d04f94dc148b594ea8be511faed1564929f8",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(184), parquet_data_file_exact_range_bytes_requested: Some(56199399), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(57151761), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 57151761,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 57151761,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "ship_date",
+              "type": "date"
+            },
+            {
+              "name": "price",
+              "type": "decimal(15,2)"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "casts-date/cast_strings/spark-on": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32",
+          "Decimal128(15, 2)"
+        ],
+        "configuration": "spark-on",
+        "id": "cast_strings",
+        "ipc_path": "EVIDENCE/candidate/casts-date/cast_strings/spark-on/result.arrow",
+        "ipc_sha256": "110a6b167a3d0295da0a7ddf2cc5f0976d470ed918a7de26fbd25cbc7f2bdb82",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[#89@0 as l_orderkey, #90@1 as l_linenumber, #91@2 as ship_date, #92@3 as price]\n  ProjectionExec: expr=[l_orderkey@0 as #89, l_linenumber@1 as #90, spark_result_metadata(spark_date(CAST(l_shipdate@3 AS Utf8View))) as #91, spark_result_metadata(spark_cast_string_to_decimal(CAST(l_extendedprice@2 AS Utf8View))) as #92]\n    DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 196,
+          "ranges_sha256": "3cd264bfdeedaf1b2f6532d872c312b4dda3ed86fec7dd0fda683b407a9c1994",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(184), parquet_data_file_exact_range_bytes_requested: Some(56199399), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(57151761), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 57151761,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 57151761,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "ship_date",
+              "type": "date"
+            },
+            {
+              "name": "price",
+              "type": "decimal(15,2)"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "parsers/date_fallback/native": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32"
+        ],
+        "configuration": "native",
+        "id": "date_fallback",
+        "ipc_path": "EVIDENCE/candidate/parsers/date_fallback/native/result.arrow",
+        "ipc_sha256": "5ab7362cfce9b2a2875cefcf834d18c3edeeac74aa60c4041595e395ff724a06",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[l_orderkey@0 as l_orderkey, l_linenumber@1 as l_linenumber, CAST(CASE WHEN l_orderkey@0 % 97 = 0 THEN NULL ELSE concat(substr(CAST(l_shipdate@2 AS Utf8View), 1, 4), -2-9) END AS Date32) as result]\n  DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 150,
+          "ranges_sha256": "e87018f6ad9b02be968346d04d451e69d890d296ce47ed8ed784267cdc4d1290",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(138), parquet_data_file_exact_range_bytes_requested: Some(24633572), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(25585934), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 25585934,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 25585934,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "result",
+              "type": "date"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "parsers/date_fallback/spark-off": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32"
+        ],
+        "configuration": "spark-off",
+        "id": "date_fallback",
+        "ipc_path": "EVIDENCE/candidate/parsers/date_fallback/spark-off/result.arrow",
+        "ipc_sha256": "5ab7362cfce9b2a2875cefcf834d18c3edeeac74aa60c4041595e395ff724a06",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[#94@0 as l_orderkey, #95@1 as l_linenumber, #96@2 as result]\n  ProjectionExec: expr=[l_orderkey@0 as #94, l_linenumber@1 as #95, spark_result_metadata(spark_date(CASE WHEN l_orderkey@0 % 97 = 0 THEN NULL ELSE concat(substr(CAST(l_shipdate@2 AS Utf8View), 1, 4), -2-9) END)) as #96]\n    DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 150,
+          "ranges_sha256": "ba3bbf91bcc48ecb9e6519cb83a4003232ef1165460a48d44b1a94d742e0e3f9",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(138), parquet_data_file_exact_range_bytes_requested: Some(24633572), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(25585934), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 25585934,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 25585934,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "result",
+              "type": "date"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "parsers/date_fallback/spark-on": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32"
+        ],
+        "configuration": "spark-on",
+        "id": "date_fallback",
+        "ipc_path": "EVIDENCE/candidate/parsers/date_fallback/spark-on/result.arrow",
+        "ipc_sha256": "5ab7362cfce9b2a2875cefcf834d18c3edeeac74aa60c4041595e395ff724a06",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[#94@0 as l_orderkey, #95@1 as l_linenumber, #96@2 as result]\n  ProjectionExec: expr=[l_orderkey@0 as #94, l_linenumber@1 as #95, spark_result_metadata(spark_date(CASE WHEN l_orderkey@0 % 97 = 0 THEN NULL ELSE concat(substr(CAST(l_shipdate@2 AS Utf8View), 1, 4), -2-9) END)) as #96]\n    DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 150,
+          "ranges_sha256": "ec5b3fc7eb8d7f8b554192feff64d4efadb27db535610d17110554277c829704",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(138), parquet_data_file_exact_range_bytes_requested: Some(24633572), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(25585934), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 25585934,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 25585934,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "result",
+              "type": "date"
+            }
+          ],
+          "type": "struct"
+        }
+      }
+    },
+    "staging": {
+      "casts-date/cast_date/native": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32"
+        ],
+        "configuration": "native",
+        "id": "cast_date",
+        "ipc_path": "EVIDENCE/staging/casts-date/cast_date/native/result.arrow",
+        "ipc_sha256": "26858dbb6cce6ca12676e2a96cc51eb67a3cff15a68351cbc188ce6bd98b63d1",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[l_orderkey@0 as l_orderkey, l_linenumber@1 as l_linenumber, CAST(CAST(l_shipdate@2 AS Utf8View) AS Date32) as ship_date]\n  DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 150,
+          "ranges_sha256": "11964535cd5360c39eddc8e737bea6a6435bef2afa764321dca6f76022772629",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(138), parquet_data_file_exact_range_bytes_requested: Some(24633572), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(25585934), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 25585934,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 25585934,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "ship_date",
+              "type": "date"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "casts-date/cast_date/spark-off": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32"
+        ],
+        "configuration": "spark-off",
+        "id": "cast_date",
+        "ipc_path": "EVIDENCE/staging/casts-date/cast_date/spark-off/result.arrow",
+        "ipc_sha256": "26858dbb6cce6ca12676e2a96cc51eb67a3cff15a68351cbc188ce6bd98b63d1",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[#89@0 as l_orderkey, #90@1 as l_linenumber, #91@2 as ship_date]\n  ProjectionExec: expr=[l_orderkey@0 as #89, l_linenumber@1 as #90, spark_result_metadata(spark_date(CAST(l_shipdate@2 AS Utf8View))) as #91]\n    DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 150,
+          "ranges_sha256": "fbd3e2ebec54b5995c42e7b480e6d1ab5e82f09e712e18d7912950d76e52b848",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(138), parquet_data_file_exact_range_bytes_requested: Some(24633572), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(25585934), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 25585934,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 25585934,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "ship_date",
+              "type": "date"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "casts-date/cast_date/spark-on": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32"
+        ],
+        "configuration": "spark-on",
+        "id": "cast_date",
+        "ipc_path": "EVIDENCE/staging/casts-date/cast_date/spark-on/result.arrow",
+        "ipc_sha256": "26858dbb6cce6ca12676e2a96cc51eb67a3cff15a68351cbc188ce6bd98b63d1",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[#89@0 as l_orderkey, #90@1 as l_linenumber, #91@2 as ship_date]\n  ProjectionExec: expr=[l_orderkey@0 as #89, l_linenumber@1 as #90, spark_result_metadata(spark_date(CAST(l_shipdate@2 AS Utf8View))) as #91]\n    DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 150,
+          "ranges_sha256": "4e7b3a783a8c57f51d36e5d91501f1e05689e06324900ad6870b55dea0472e9f",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(138), parquet_data_file_exact_range_bytes_requested: Some(24633572), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(25585934), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 25585934,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 25585934,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "ship_date",
+              "type": "date"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "casts-date/cast_strings/native": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32",
+          "Decimal128(15, 2)"
+        ],
+        "configuration": "native",
+        "id": "cast_strings",
+        "ipc_path": "EVIDENCE/staging/casts-date/cast_strings/native/result.arrow",
+        "ipc_sha256": "110a6b167a3d0295da0a7ddf2cc5f0976d470ed918a7de26fbd25cbc7f2bdb82",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[l_orderkey@0 as l_orderkey, l_linenumber@1 as l_linenumber, CAST(CAST(l_shipdate@3 AS Utf8View) AS Date32) as ship_date, CAST(CAST(l_extendedprice@2 AS Utf8View) AS Decimal128(15, 2)) as price]\n  DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 196,
+          "ranges_sha256": "de8048d549ebf5b090028beabb40bd798483fc34278736f640b61095e6c5d96f",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(184), parquet_data_file_exact_range_bytes_requested: Some(56199399), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(57151761), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 57151761,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 57151761,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "ship_date",
+              "type": "date"
+            },
+            {
+              "name": "price",
+              "type": "decimal(15,2)"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "casts-date/cast_strings/spark-off": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32",
+          "Decimal128(15, 2)"
+        ],
+        "configuration": "spark-off",
+        "id": "cast_strings",
+        "ipc_path": "EVIDENCE/staging/casts-date/cast_strings/spark-off/result.arrow",
+        "ipc_sha256": "110a6b167a3d0295da0a7ddf2cc5f0976d470ed918a7de26fbd25cbc7f2bdb82",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[#89@0 as l_orderkey, #90@1 as l_linenumber, #91@2 as ship_date, #92@3 as price]\n  ProjectionExec: expr=[l_orderkey@0 as #89, l_linenumber@1 as #90, spark_result_metadata(spark_date(CAST(l_shipdate@3 AS Utf8View))) as #91, spark_result_metadata(spark_cast_string_to_decimal(CAST(l_extendedprice@2 AS Utf8View))) as #92]\n    DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 196,
+          "ranges_sha256": "3fd8d8d27c4a53b98efe11b8485fe70ee83c92053af5f076615d8e97339d8961",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(184), parquet_data_file_exact_range_bytes_requested: Some(56199399), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(57151761), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 57151761,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 57151761,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "ship_date",
+              "type": "date"
+            },
+            {
+              "name": "price",
+              "type": "decimal(15,2)"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "casts-date/cast_strings/spark-on": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32",
+          "Decimal128(15, 2)"
+        ],
+        "configuration": "spark-on",
+        "id": "cast_strings",
+        "ipc_path": "EVIDENCE/staging/casts-date/cast_strings/spark-on/result.arrow",
+        "ipc_sha256": "110a6b167a3d0295da0a7ddf2cc5f0976d470ed918a7de26fbd25cbc7f2bdb82",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[#89@0 as l_orderkey, #90@1 as l_linenumber, #91@2 as ship_date, #92@3 as price]\n  ProjectionExec: expr=[l_orderkey@0 as #89, l_linenumber@1 as #90, spark_result_metadata(spark_date(CAST(l_shipdate@3 AS Utf8View))) as #91, spark_result_metadata(spark_cast_string_to_decimal(CAST(l_extendedprice@2 AS Utf8View))) as #92]\n    DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 196,
+          "ranges_sha256": "acff3ed80274a1dc523d37524ee4a1a190fe55bae971a1d641ecb51b81d727fb",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(184), parquet_data_file_exact_range_bytes_requested: Some(56199399), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(57151761), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 57151761,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 57151761,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "ship_date",
+              "type": "date"
+            },
+            {
+              "name": "price",
+              "type": "decimal(15,2)"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "parsers/date_fallback/native": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32"
+        ],
+        "configuration": "native",
+        "id": "date_fallback",
+        "ipc_path": "EVIDENCE/staging/parsers/date_fallback/native/result.arrow",
+        "ipc_sha256": "5ab7362cfce9b2a2875cefcf834d18c3edeeac74aa60c4041595e395ff724a06",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[l_orderkey@0 as l_orderkey, l_linenumber@1 as l_linenumber, CAST(CASE WHEN l_orderkey@0 % 97 = 0 THEN NULL ELSE concat(substr(CAST(l_shipdate@2 AS Utf8View), 1, 4), -2-9) END AS Date32) as result]\n  DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 150,
+          "ranges_sha256": "4665987651e8c5a40c08218cdd6339565bfaf0553628abcba62ca9c4f7dd6dc2",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(138), parquet_data_file_exact_range_bytes_requested: Some(24633572), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(25585934), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 25585934,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 25585934,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "result",
+              "type": "date"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "parsers/date_fallback/spark-off": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32"
+        ],
+        "configuration": "spark-off",
+        "id": "date_fallback",
+        "ipc_path": "EVIDENCE/staging/parsers/date_fallback/spark-off/result.arrow",
+        "ipc_sha256": "5ab7362cfce9b2a2875cefcf834d18c3edeeac74aa60c4041595e395ff724a06",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[#94@0 as l_orderkey, #95@1 as l_linenumber, #96@2 as result]\n  ProjectionExec: expr=[l_orderkey@0 as #94, l_linenumber@1 as #95, spark_result_metadata(spark_date(CASE WHEN l_orderkey@0 % 97 = 0 THEN NULL ELSE concat(substr(CAST(l_shipdate@2 AS Utf8View), 1, 4), -2-9) END)) as #96]\n    DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 150,
+          "ranges_sha256": "7f2b507b61832fee39b85bfd0077bd06be883ba9eab432c5a45599baf412b7e3",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(138), parquet_data_file_exact_range_bytes_requested: Some(24633572), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(25585934), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 25585934,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 25585934,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "result",
+              "type": "date"
+            }
+          ],
+          "type": "struct"
+        }
+      },
+      "parsers/date_fallback/spark-on": {
+        "arrow_types": [
+          "Int64",
+          "Int32",
+          "Date32"
+        ],
+        "configuration": "spark-on",
+        "id": "date_fallback",
+        "ipc_path": "EVIDENCE/staging/parsers/date_fallback/spark-on/result.arrow",
+        "ipc_sha256": "5ab7362cfce9b2a2875cefcf834d18c3edeeac74aa60c4041595e395ff724a06",
+        "kind": "preflight_result",
+        "output_partitions": 2,
+        "physical_plan": "ProjectionExec: expr=[#94@0 as l_orderkey, #95@1 as l_linenumber, #96@2 as result]\n  ProjectionExec: expr=[l_orderkey@0 as #94, l_linenumber@1 as #95, spark_result_metadata(spark_date(CASE WHEN l_orderkey@0 % 97 = 0 THEN NULL ELSE concat(substr(CAST(l_shipdate@2 AS Utf8View), 1, 4), -2-9) END)) as #96]\n    DeltaScanExec: snapshot_version=0, partitions=2\n",
+        "rows": 6001215,
+        "source_io": {
+          "counters_complete": true,
+          "distinct_source_files": [
+            "part-00000.parquet",
+            "part-00001.parquet",
+            "part-00002.parquet",
+            "part-00003.parquet",
+            "part-00004.parquet",
+            "part-00005.parquet"
+          ],
+          "file_tasks_completed": 6,
+          "file_tasks_started": 6,
+          "files_planned": 6,
+          "range_count": 150,
+          "ranges_sha256": "8a2054dfc14cdc61943337e579e7277b2442af87eb761f3112939d074be54e3c",
+          "reader_metrics": [
+            "DeltaScanMetricsSnapshot { snapshot_version: 0, parquet_backend: Direct, scan_partitions_planned: 2, files_planned: 6, add_actions_excluded_during_planning: Some(0), estimated_input_rows: Some(6001215), estimated_input_bytes: Some(3808281862), scan_partitions_started: 2, scan_partitions_completed: 2, file_tasks_started: 6, file_tasks_completed: 6, scheduler_batches_emitted: 733, scheduler_rows_emitted: 6001215, deletion_vector_payloads_loaded: 0, deletion_vectors_applied: 0, deletion_vector_rows_deleted: 0, deletion_vector_failures: 0, deletion_vector_coordinate_rejections: 0, parquet_data_file_exact_ranges_requested: Some(138), parquet_data_file_exact_range_bytes_requested: Some(24633572), parquet_data_file_physical_range_requests_planned: Some(0), parquet_data_file_physical_range_bytes_planned: Some(0), parquet_data_file_cold_start_range_plans: Some(0), parquet_data_file_cost_based_exact_range_plans: Some(0), parquet_data_file_cost_based_merged_range_plans: Some(0), parquet_data_file_store_delegated_range_plans: Some(46), parquet_data_file_range_get_operations: Some(58), parquet_data_file_full_get_operations: Some(0), parquet_data_file_bytes_received: Some(25585934), estimated_parquet_task_bytes_admitted: Some(3808281862) }"
+          ],
+          "recorded_range_bytes": 25585934,
+          "scan_partitions_completed": 2,
+          "scan_partitions_started": 2,
+          "source_bytes_received": 25585934,
+          "source_file_count": 6,
+          "source_full_gets": 0,
+          "source_range_gets": 58,
+          "store_read_calls": 58
+        },
+        "sql_schema": {
+          "fields": [
+            {
+              "name": "l_orderkey",
+              "type": "long"
+            },
+            {
+              "name": "l_linenumber",
+              "type": "integer"
+            },
+            {
+              "name": "result",
+              "type": "date"
+            }
+          ],
+          "type": "struct"
+        }
+      }
+    }
+  },
+  "protocol_sha256": "1ad853ed361a118eb1ad11137a17c87b001f047100f81d89ff80a66ef0ba18fd",
+  "row_comparisons": {
+    "cross-release/casts-date/cast_date/native": 6001215,
+    "cross-release/casts-date/cast_date/spark-off": 6001215,
+    "cross-release/casts-date/cast_date/spark-on": 6001215,
+    "cross-release/casts-date/cast_strings/native": 6001215,
+    "cross-release/casts-date/cast_strings/spark-off": 6001215,
+    "cross-release/casts-date/cast_strings/spark-on": 6001215,
+    "cross-release/parsers/date_fallback/native": 6001215,
+    "cross-release/parsers/date_fallback/spark-off": 6001215,
+    "cross-release/parsers/date_fallback/spark-on": 6001215,
+    "native-reference/casts-date/cast_date/spark-off": 6001215,
+    "native-reference/casts-date/cast_date/spark-on": 6001215,
+    "native-reference/casts-date/cast_strings/spark-off": 6001215,
+    "native-reference/casts-date/cast_strings/spark-on": 6001215,
+    "native-reference/parsers/date_fallback/spark-off": 6001215,
+    "native-reference/parsers/date_fallback/spark-on": 6001215
+  }
+}

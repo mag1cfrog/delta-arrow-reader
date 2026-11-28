@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::Arc;
 
+use chrono::NaiveDate;
 use datafusion::arrow::array::{Array, Date32Array, new_null_array};
 use datafusion::arrow::compute::kernels::cast_utils::Parser;
 use datafusion::arrow::datatypes::{DataType, Date32Type};
@@ -33,6 +34,9 @@ impl SparkDate {
     }
 
     fn string_to_date32(value: &str, is_try: bool) -> Result<Option<i32>> {
+        if let Some(date) = parse_complete_numeric_date(value) {
+            return Ok(Some(date));
+        }
         // Match a complete numeric date before invoking Arrow's broader parser.
         let bytes = value.as_bytes();
         if bytes.len() == 10
@@ -75,6 +79,29 @@ impl SparkDate {
             Err(e) => Err(e),
         }
     }
+}
+
+fn parse_complete_numeric_date(value: &str) -> Option<i32> {
+    fn decimal(bytes: &[u8]) -> Option<u32> {
+        bytes.iter().try_fold(0, |value, byte| {
+            let digit = byte.wrapping_sub(b'0');
+            (digit < 10).then_some(value * 10 + u32::from(digit))
+        })
+    }
+
+    let bytes = value.as_bytes();
+    let [_, _, _, _, b'-', tail @ ..] = bytes else {
+        return None;
+    };
+    let (month, day) = match tail {
+        [_, b'-', _] | [_, b'-', _, _] => (&tail[..1], &tail[2..]),
+        [_, _, b'-', _] | [_, _, b'-', _, _] => (&tail[..2], &tail[3..]),
+        _ => return None,
+    };
+    // Four ASCII digits fit in the signed year field.
+    let year = decimal(&bytes[..4])? as i32;
+    let date = NaiveDate::from_ymd_opt(year, decimal(month)?, decimal(day)?)?;
+    Some(Date32Type::from_naive_date(date))
 }
 
 fn has_unpadded_date_shape(bytes: &[u8]) -> bool {
@@ -349,6 +376,29 @@ mod tests {
             }
         }
         Ok(())
+    }
+
+    #[test]
+    fn complete_numeric_date_matches_the_arrow_calendar_parser() {
+        for year in [0, 1, 1899, 1900, 1999, 2000, 2024, 2100, 9999] {
+            for month in 0..=13 {
+                for day in 0..=32 {
+                    let inputs = [
+                        format!("{year:04}-{month}-{day}"),
+                        format!("{year:04}-{month:02}-{day}"),
+                        format!("{year:04}-{month}-{day:02}"),
+                        format!("{year:04}-{month:02}-{day:02}"),
+                    ];
+                    for input in inputs {
+                        assert_eq!(
+                            parse_complete_numeric_date(&input),
+                            Date32Type::parse(&input),
+                            "{input}",
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
