@@ -210,6 +210,18 @@ impl ScalarUDFImpl for SparkDate {
                             .map(|opt| opt.flatten())
                         })
                         .collect::<Result<Date32Array>>()?,
+                    DataType::Utf8View if format.is_none() => {
+                        let strings = as_string_view_array(&array)?;
+                        let mut dates = Date32Array::builder(strings.len());
+                        for text in strings {
+                            let date = text
+                                .map(|text| Self::string_to_date32(text, is_try))
+                                .transpose()?
+                                .flatten();
+                            dates.append_option(date);
+                        }
+                        dates.finish()
+                    }
                     DataType::Utf8View => as_string_view_array(&array)?
                         .iter()
                         .map(|x| {
@@ -399,6 +411,69 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn unformatted_date_view_builder_matches_row_collection()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        use datafusion::arrow::array::StringViewArray;
+        use datafusion::arrow::datatypes::Field;
+        use datafusion::common::config::ConfigOptions;
+
+        let captures: std::collections::BTreeMap<String, Vec<String>> = serde_json::from_str(
+            include_str!("../../../tests/fixtures/date-cast-1385-inputs.json"),
+        )?;
+        for (category, strings) in captures {
+            let values = std::iter::once(None)
+                .chain(strings.iter().map(|text| Some(text.as_str())))
+                .collect::<Vec<_>>();
+            let input = Arc::new(StringViewArray::from(values));
+            let rows = input.len();
+            for is_try in [false, true] {
+                let expected = input
+                    .iter()
+                    .map(|text| {
+                        text.map(|text| SparkDate::string_to_date32(text, is_try))
+                            .transpose()
+                            .map(Option::flatten)
+                    })
+                    .collect::<Result<Date32Array>>();
+                let actual = SparkDate::new(is_try)
+                    .invoke_with_args(ScalarFunctionArgs {
+                        args: vec![ColumnarValue::Array(input.clone())],
+                        arg_fields: vec![Arc::new(Field::new("text", DataType::Utf8View, true))],
+                        return_field: Arc::new(Field::new("date", DataType::Date32, true)),
+                        number_rows: rows,
+                        config_options: Arc::new(ConfigOptions::default()),
+                    })
+                    .and_then(|result| result.into_array(rows));
+                match (expected, actual) {
+                    (Ok(expected), Ok(actual)) => {
+                        assert_eq!(expected.to_data(), actual.to_data(), "{category}, {is_try}");
+                    }
+                    (Err(expected), Err(actual)) => {
+                        assert_eq!(
+                            std::mem::discriminant(expected.find_root()),
+                            std::mem::discriminant(actual.find_root()),
+                            "{category}, {is_try}",
+                        );
+                        assert_eq!(
+                            expected.to_string(),
+                            actual.to_string(),
+                            "{category}, {is_try}"
+                        );
+                    }
+                    (expected, actual) => {
+                        assert_eq!(
+                            format!("{expected:?}"),
+                            format!("{actual:?}"),
+                            "{category}, {is_try}"
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     #[test]

@@ -2606,6 +2606,16 @@ measured the repeated guarded dispatch. The differential checks
 both field widths and calendar boundaries against Arrow and
 retains the existing parser, error and NULL fixture checks.
 
+### Preallocated Utf8View DATE collection (#1389)
+
+Unformatted Utf8View DATE casts reserve the Date32 output for
+the input array length. Each row uses the same scalar parser
+and the first strict failure still ends conversion. The
+[Mac profile](benches/reports/date-cast-1389-macos-profile.md)
+isolated collection overhead for the unpadded string array.
+An array differential uses the committed date captures to
+compare values, NULLs, executed Date32 type and error text.
+
 ### Whole-second strings in DATE_FORMAT (#1389, second round)
 
 DATE_FORMAT reuses the existing whole-second timestamp parser for complete
