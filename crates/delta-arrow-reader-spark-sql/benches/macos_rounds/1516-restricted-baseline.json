@@ -1,0 +1,15 @@
+{
+  "source": "e9f5ce76eb41ed6f4cee035217837f0ec1733993",
+  "manifest_sha256": "f9116c6ce9385847ef368ca41125fc85d1e0f2fbbca976e7b461a86ebbbcf160",
+  "legacy_overlay_sha256": "0b2ddbcd8137b57789ff81398dd9952a54a1a2ab45ea904f7a1abae7b5b6d3c9",
+  "schedule_sha256": "e317b6fc4dcd463a155a55b32b8c9b036eaa7419176ff0ed06a2b3e7252d4102",
+  "blocks": 9,
+  "samples": 9,
+  "preflight_seconds": 3600,
+  "preflight_process_seconds": 300,
+  "process_seconds": 130,
+  "max_seconds": 10800,
+  "prior_decisions": {
+    "scalar.string.regexp_replace": "Maintainer decision #1516 comment 7154429902. The accepted #1554 native Mac replay stays in effect. Linux x86 confirmation is pending."
+  }
+}
