@@ -2492,6 +2492,16 @@ compression and typed conversion are preserved.
 The [Mac profile](benches/reports/percentile-1516-macos-profile.md)
 records the repeated summary work and the lossy state counterexample.
 
+### Compact approximate-percentile rank summaries in place (#1516)
+
+The original backward rank walk writes surviving samples into the
+already consumed suffix. The retained suffix moves to the start
+in sorted order. Capacity is bounded by the previous vector's
+geometric growth rule. Rank comparisons, ties, count, state and
+returned percentiles retain the original logic. The
+[Mac aggregate profile](benches/reports/percentile-1516-macos-aggregate-profile.md)
+measured this compression phase before the change.
+
 ### Approximate percentile ranks
 
 Spark APPROX_PERCENTILE and PERCENTILE_APPROX use a local Rust adaptation of

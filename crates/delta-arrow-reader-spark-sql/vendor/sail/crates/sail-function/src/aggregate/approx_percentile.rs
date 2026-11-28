@@ -568,22 +568,32 @@ impl QuantileSummary {
             return;
         }
         let threshold = 2.0 * self.relative_error * self.count as f64;
-        let mut result = Vec::new();
-        let mut head = self.samples[self.samples.len() - 1];
-        for sample in self.samples[1..self.samples.len() - 1].iter().rev() {
+        let first = self.samples[0];
+        let len = self.samples.len();
+        let mut head = self.samples[len - 1];
+        let mut write = len;
+        // Write survivors into the consumed suffix in ascending rank order.
+        for read in (1..len - 1).rev() {
+            let sample = self.samples[read];
             if ((sample.rank_gap + head.rank_gap + head.rank_uncertainty) as f64) < threshold {
                 head.rank_gap += sample.rank_gap;
             } else {
-                result.push(head);
-                head = *sample;
+                write -= 1;
+                self.samples[write] = head;
+                head = sample;
             }
         }
-        result.push(head);
-        if self.samples[0].value <= head.value {
-            result.push(self.samples[0]);
+        write -= 1;
+        self.samples[write] = head;
+        if first.value <= head.value {
+            write -= 1;
+            self.samples[write] = first;
         }
-        result.reverse();
-        self.samples = result;
+        self.samples.copy_within(write.., 0);
+        self.samples.truncate(len - write);
+        // Retain at most the capacity a fresh, geometrically grown vector would use.
+        self.samples
+            .shrink_to(self.samples.len().max(4).next_power_of_two());
     }
 
     fn merge(&mut self, other: Self) {
@@ -827,6 +837,78 @@ mod tests {
             }
         }
         Ok(())
+    }
+
+    #[test]
+    fn in_place_compression_matches_the_original_rank_walk() {
+        fn reference(samples: &[RankSample], threshold: f64) -> Vec<RankSample> {
+            let mut result = Vec::new();
+            let mut head = samples[samples.len() - 1];
+            for sample in samples[1..samples.len() - 1].iter().rev() {
+                if ((sample.rank_gap + head.rank_gap + head.rank_uncertainty) as f64) < threshold {
+                    head.rank_gap += sample.rank_gap;
+                } else {
+                    result.push(head);
+                    head = *sample;
+                }
+            }
+            result.push(head);
+            if samples[0].value <= head.value {
+                result.push(samples[0]);
+            }
+            result.reverse();
+            result
+        }
+
+        fn rank_bits(sample: &RankSample) -> (u64, u64, u64) {
+            (
+                sample.value.to_bits(),
+                sample.rank_gap,
+                sample.rank_uncertainty,
+            )
+        }
+
+        let values = [
+            f64::from_bits(0xfff8_0000_0000_0002),
+            f64::NEG_INFINITY,
+            -5.0,
+            -0.0,
+            0.0,
+            0.0,
+            2.0,
+            2.0,
+            f64::INFINITY,
+            f64::from_bits(0x7ff8_0000_0000_0001),
+        ];
+        for start in 0..values.len() - 1 {
+            for end in start + 2..=values.len() {
+                for relative_error in [0.0001, 0.05, 0.25, 0.5, 1.0] {
+                    let samples = values[start..end]
+                        .iter()
+                        .enumerate()
+                        .map(|(index, value)| RankSample {
+                            value: *value,
+                            rank_gap: (index % 4 + 1) as u64,
+                            rank_uncertainty: (index % 3) as u64,
+                        })
+                        .collect::<Vec<_>>();
+                    let count: u64 = samples.iter().map(|sample| sample.rank_gap).sum();
+                    let expected = reference(&samples, 2.0 * relative_error * count as f64);
+                    let mut summary = QuantileSummary::new(relative_error);
+                    summary.samples = samples;
+                    summary.count = count;
+                    summary.compress();
+
+                    assert_eq!(summary.count, count);
+                    assert_eq!(
+                        summary.samples.iter().map(rank_bits).collect::<Vec<_>>(),
+                        expected.iter().map(rank_bits).collect::<Vec<_>>(),
+                        "sample range {start}..{end}, relative error {relative_error}",
+                    );
+                    assert!(summary.samples.capacity() <= expected.capacity());
+                }
+            }
+        }
     }
 
     #[test]
