@@ -63,6 +63,10 @@ preflight compared all 6,001,215 rows, executed SQL and Arrow
 types, and cross-release source I/O. All 15 exact comparisons
 passed. There were 18 observations and no exclusions.
 
+Formatting, strict root-package Clippy and the full Spark workspace
+suite passed on the candidate product commit. Later commits add
+the protocol, harness adapter and evidence.
+
 - [Exact results and release receipts](date-cast-1389-macos-direct-preflight.json)
 - [Full paired results](date-cast-1389-macos-direct-comparisons.json)
 - [Compressed raw samples](date-cast-1389-macos-direct-samples.jsonl.gz)
