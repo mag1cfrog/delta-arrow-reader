@@ -1,0 +1,114 @@
+{
+  "sql_preflight": {
+    "stage": "e9f5ce76eb41ed6f4cee035217837f0ec1733993",
+    "fixture_sha256": "f95853a59ab1063834353201b3234f85a423273efd11af540d5dcf7836b443ce",
+    "last_two_rows": {
+      "spark-off": [
+        "[\"5\",\"0000000000000000\",\"0000000000000000\"]",
+        "[\"6\",\"3ff0000000000000\",\"4000000000000000\"]"
+      ],
+      "spark-on": [
+        "[\"5\",\"0000000000000000\",\"0000000000000000\"]",
+        "[\"6\",\"3ff0000000000000\",\"4000000000000000\"]"
+      ]
+    },
+    "rows": 7,
+    "preflight": [
+      {
+        "configuration": "spark-off",
+        "status": "ok",
+        "rows": 7,
+        "types": [
+          "Int64",
+          "Float64",
+          "Float64"
+        ],
+        "source_guard_rows": 7,
+        "comparison": null,
+        "identical_plan_candidate": false,
+        "same_physical_function": false,
+        "function_evidence": {
+          "kernels": "[Aggregate(AggregateUDF { inner: ApproxPercentile { signature: Signature { type_signature: UserDefined, volatility: Immutable, parameter_names: None } } }), Aggregate(AggregateUDF { inner: ApproxPercentile { signature: Signature { type_signature: UserDefined, volatility: Immutable, parameter_names: None } } })]",
+          "expressions": [
+            "Column { name: \"#2\", index: 1 }",
+            "Literal { value: Decimal128(Some(5),1,1), field: Field { name: \"lit\", data_type: Decimal128(1, 1) } }",
+            "Literal { value: Int32(1), field: Field { name: \"lit\", data_type: Int32 } }",
+            "Column { name: \"#1\", index: 1 }",
+            "Literal { value: Decimal128(Some(5),1,1), field: Field { name: \"lit\", data_type: Decimal128(1, 1) } }",
+            "Literal { value: Int32(1), field: Field { name: \"lit\", data_type: Int32 } }"
+          ],
+          "unknown_window": false
+        },
+        "native_function_evidence": null
+      },
+      {
+        "configuration": "spark-on",
+        "status": "ok",
+        "rows": 7,
+        "types": [
+          "Int64",
+          "Float64",
+          "Float64"
+        ],
+        "source_guard_rows": 7,
+        "comparison": null,
+        "identical_plan_candidate": false,
+        "same_physical_function": false,
+        "function_evidence": {
+          "kernels": "[Aggregate(AggregateUDF { inner: ApproxPercentile { signature: Signature { type_signature: UserDefined, volatility: Immutable, parameter_names: None } } }), Aggregate(AggregateUDF { inner: ApproxPercentile { signature: Signature { type_signature: UserDefined, volatility: Immutable, parameter_names: None } } })]",
+          "expressions": [
+            "Column { name: \"#2\", index: 1 }",
+            "Literal { value: Decimal128(Some(5),1,1), field: Field { name: \"lit\", data_type: Decimal128(1, 1) } }",
+            "Literal { value: Int32(1), field: Field { name: \"lit\", data_type: Int32 } }",
+            "Column { name: \"#1\", index: 1 }",
+            "Literal { value: Decimal128(Some(5),1,1), field: Field { name: \"lit\", data_type: Decimal128(1, 1) } }",
+            "Literal { value: Int32(1), field: Field { name: \"lit\", data_type: Int32 } }"
+          ],
+          "unknown_window": false
+        },
+        "native_function_evidence": null
+      }
+    ]
+  },
+  "compressed_summary": {
+    "source_sha256": "df6a48d8053fc2075e434db1b5a6b6637d9d4af42be87a1ed4f0ae82d85465a2",
+    "sail_summary_source_sha256": "1327b243d61f780a901ca89e68053df4950693804ef7408b4ce0c5e54952d1fc",
+    "relative_error": 1.0,
+    "prior_inputs": [
+      [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      [
+        0,
+        2,
+        2,
+        2,
+        4
+      ]
+    ],
+    "prior_count": 5,
+    "compressed_tuples": [
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        4,
+        4,
+        0
+      ]
+    ],
+    "departing": 0,
+    "arriving": 5,
+    "fresh_medians_after_advance": [
+      1,
+      2
+    ],
+    "output": "Same compressed state. Fresh next results: 1, 2"
+  }
+}
