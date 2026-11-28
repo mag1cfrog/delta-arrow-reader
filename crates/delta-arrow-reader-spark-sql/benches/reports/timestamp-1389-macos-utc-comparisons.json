@@ -1,0 +1,87 @@
+{
+  "process_status": {
+    "ok": 216
+  },
+  "retained": 1944,
+  "excluded": {},
+  "comparisons": {
+    "parsers/timestamp_ltz/native": {
+      "status": "ok",
+      "before": 341072583,
+      "after": 341509667,
+      "delta": 1129459,
+      "floor": 8069833.0,
+      "decision": "within floor"
+    },
+    "parsers/timestamp_ltz/spark-off": {
+      "status": "ok",
+      "before": 370507875,
+      "after": 296367667,
+      "delta": -74145875,
+      "floor": 8812499.5,
+      "decision": "faster"
+    },
+    "parsers/timestamp_ltz/spark-on": {
+      "status": "ok",
+      "before": 370485541,
+      "after": 295579791,
+      "delta": -74651542,
+      "floor": 3035542.0,
+      "decision": "faster"
+    },
+    "parsers/timestamp_ntz/native": {
+      "status": "ok",
+      "before": 310199542,
+      "after": 311647875,
+      "delta": 1108334,
+      "floor": 872354.0,
+      "decision": "slower"
+    },
+    "parsers/timestamp_ntz/spark-off": {
+      "status": "ok",
+      "before": 310770750,
+      "after": 297383292,
+      "delta": -13404250,
+      "floor": 2555791.5,
+      "decision": "faster"
+    },
+    "parsers/timestamp_ntz/spark-on": {
+      "status": "ok",
+      "before": 310493125,
+      "after": 297090375,
+      "delta": -13402750,
+      "floor": 5215729.0,
+      "decision": "faster"
+    }
+  },
+  "references": {
+    "parsers/timestamp_ltz/spark-off": {
+      "reference": "parsers/timestamp_ltz/native",
+      "before_ns": 29854041,
+      "after_ns": -45332583,
+      "floor_ns": 7951792.0,
+      "rows": 6001215
+    },
+    "parsers/timestamp_ltz/spark-on": {
+      "reference": "parsers/timestamp_ltz/native",
+      "before_ns": 29085209,
+      "after_ns": -45929876,
+      "floor_ns": 8829000.0,
+      "rows": 6001215
+    },
+    "parsers/timestamp_ntz/spark-off": {
+      "reference": "parsers/timestamp_ntz/native",
+      "before_ns": 280667,
+      "after_ns": -14273125,
+      "floor_ns": 3354875.0,
+      "rows": 6001215
+    },
+    "parsers/timestamp_ntz/spark-on": {
+      "reference": "parsers/timestamp_ntz/native",
+      "before_ns": 496833,
+      "after_ns": -14624833,
+      "floor_ns": 5154749.5,
+      "rows": 6001215
+    }
+  }
+}
