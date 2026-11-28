@@ -1,0 +1,560 @@
+{
+  "phases": {
+    "native": {
+      "create": {
+        "ns_per_input_row": 0.00025,
+        "aa_floor": 0.0001045
+      },
+      "discard": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "replay": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "update": {
+        "ns_per_input_row": 3.4607919999999996,
+        "aa_floor": 0.048377000000000114
+      },
+      "retract": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "merge": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "evaluate": {
+        "ns_per_input_row": 8.3e-05,
+        "aa_floor": 4.999999999999986e-07
+      },
+      "state": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "materialize": {
+        "ns_per_input_row": 4.2e-05,
+        "aa_floor": 2.05e-05
+      },
+      "convert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_insert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_compress": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_query": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_flush": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_sort": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "aggregate_work": {
+        "ns_per_input_row": 3.4608749999999997,
+        "aa_floor": 0.048376500000000044
+      },
+      "buffer_merge_without_sort": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      }
+    },
+    "spark-off": {
+      "create": {
+        "ns_per_input_row": 0.00025,
+        "aa_floor": 0.0001045
+      },
+      "discard": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "replay": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "update": {
+        "ns_per_input_row": 7.742515,
+        "aa_floor": 0.17483350000000053
+      },
+      "retract": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "merge": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "evaluate": {
+        "ns_per_input_row": 0.3232085,
+        "aa_floor": 0.008646000000000015
+      },
+      "state": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "materialize": {
+        "ns_per_input_row": 4.2e-05,
+        "aa_floor": 4.1500000000000006e-05
+      },
+      "convert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_insert": {
+        "ns_per_input_row": 7.7084165,
+        "aa_floor": 0.17579499999999992
+      },
+      "summary_compress": {
+        "ns_per_input_row": 2.325188,
+        "aa_floor": 0.09381449999999991
+      },
+      "summary_query": {
+        "ns_per_input_row": 0.012625,
+        "aa_floor": 0.00018750000000000017
+      },
+      "summary_flush": {
+        "ns_per_input_row": 3.72473,
+        "aa_floor": 0.08401999999999998
+      },
+      "summary_sort": {
+        "ns_per_input_row": 0.6430425,
+        "aa_floor": 0.01754049999999996
+      },
+      "aggregate_work": {
+        "ns_per_input_row": 8.063098,
+        "aa_floor": 0.18527399999999972
+      },
+      "buffer_merge_without_sort": {
+        "ns_per_input_row": 3.0851224999999998,
+        "aa_floor": 0.07956300000000005
+      }
+    },
+    "spark-on": {
+      "create": {
+        "ns_per_input_row": 0.000292,
+        "aa_floor": 0.000125
+      },
+      "discard": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "replay": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "update": {
+        "ns_per_input_row": 7.714316,
+        "aa_floor": 0.2725854999999999
+      },
+      "retract": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "merge": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "evaluate": {
+        "ns_per_input_row": 0.323625,
+        "aa_floor": 0.008604
+      },
+      "state": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "materialize": {
+        "ns_per_input_row": 4.2e-05,
+        "aa_floor": 4.1500000000000006e-05
+      },
+      "convert": {
+        "ns_per_input_row": 0.0,
+        "aa_floor": 0.0
+      },
+      "summary_insert": {
+        "ns_per_input_row": 7.6804355,
+        "aa_floor": 0.2728970000000004
+      },
+      "summary_compress": {
+        "ns_per_input_row": 2.3262289999999997,
+        "aa_floor": 0.10922950000000009
+      },
+      "summary_query": {
+        "ns_per_input_row": 0.0126455,
+        "aa_floor": 0.00022900000000000004
+      },
+      "summary_flush": {
+        "ns_per_input_row": 3.709708,
+        "aa_floor": 0.131332
+      },
+      "summary_sort": {
+        "ns_per_input_row": 0.6416245,
+        "aa_floor": 0.014332500000000026
+      },
+      "aggregate_work": {
+        "ns_per_input_row": 8.036378500000001,
+        "aa_floor": 0.28660650000000043
+      },
+      "buffer_merge_without_sort": {
+        "ns_per_input_row": 3.0586845,
+        "aa_floor": 0.12383349999999993
+      }
+    }
+  },
+  "gaps": {
+    "spark-off": {
+      "update": {
+        "gap": 4.271828,
+        "floor": 0.17483350000000053,
+        "above_floor": true
+      },
+      "merge": {
+        "gap": 0.0,
+        "floor": 0.0,
+        "above_floor": false
+      },
+      "state": {
+        "gap": 0.0,
+        "floor": 0.0,
+        "above_floor": false
+      },
+      "evaluate": {
+        "gap": 0.32312450000000004,
+        "floor": 0.008646000000000015,
+        "above_floor": true
+      },
+      "aggregate_work": {
+        "gap": 4.593202999999999,
+        "floor": 0.18527399999999972,
+        "above_floor": true
+      }
+    },
+    "spark-on": {
+      "update": {
+        "gap": 4.242958000000001,
+        "floor": 0.2725854999999999,
+        "above_floor": true
+      },
+      "merge": {
+        "gap": 0.0,
+        "floor": 0.0,
+        "above_floor": false
+      },
+      "state": {
+        "gap": 0.0,
+        "floor": 0.0,
+        "above_floor": false
+      },
+      "evaluate": {
+        "gap": 0.323541,
+        "floor": 0.008604,
+        "above_floor": true
+      },
+      "aggregate_work": {
+        "gap": 4.564935999999999,
+        "floor": 0.28660650000000043,
+        "above_floor": true
+      }
+    }
+  },
+  "counts": {
+    "native": {
+      "create": [
+        [
+          1,
+          0
+        ]
+      ],
+      "discard": [
+        [
+          0,
+          0
+        ]
+      ],
+      "replay": [
+        [
+          0,
+          0
+        ]
+      ],
+      "update": [
+        [
+          123,
+          1000000
+        ]
+      ],
+      "retract": [
+        [
+          0,
+          0
+        ]
+      ],
+      "merge": [
+        [
+          0,
+          0
+        ]
+      ],
+      "evaluate": [
+        [
+          1,
+          0
+        ]
+      ],
+      "state": [
+        [
+          0,
+          0
+        ]
+      ],
+      "materialize": [
+        [
+          1,
+          1
+        ]
+      ],
+      "convert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_insert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_compress": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_query": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_flush": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_sort": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    "spark-off": {
+      "create": [
+        [
+          1,
+          0
+        ]
+      ],
+      "discard": [
+        [
+          0,
+          0
+        ]
+      ],
+      "replay": [
+        [
+          0,
+          0
+        ]
+      ],
+      "update": [
+        [
+          123,
+          1000000
+        ]
+      ],
+      "retract": [
+        [
+          0,
+          0
+        ]
+      ],
+      "merge": [
+        [
+          0,
+          0
+        ]
+      ],
+      "evaluate": [
+        [
+          1,
+          0
+        ]
+      ],
+      "state": [
+        [
+          0,
+          0
+        ]
+      ],
+      "materialize": [
+        [
+          1,
+          1
+        ]
+      ],
+      "convert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_insert": [
+        [
+          123,
+          937500
+        ]
+      ],
+      "summary_compress": [
+        [
+          19,
+          1528299
+        ]
+      ],
+      "summary_query": [
+        [
+          1,
+          0
+        ]
+      ],
+      "summary_flush": [
+        [
+          19,
+          937500
+        ]
+      ],
+      "summary_sort": [
+        [
+          19,
+          937500
+        ]
+      ]
+    },
+    "spark-on": {
+      "create": [
+        [
+          1,
+          0
+        ]
+      ],
+      "discard": [
+        [
+          0,
+          0
+        ]
+      ],
+      "replay": [
+        [
+          0,
+          0
+        ]
+      ],
+      "update": [
+        [
+          123,
+          1000000
+        ]
+      ],
+      "retract": [
+        [
+          0,
+          0
+        ]
+      ],
+      "merge": [
+        [
+          0,
+          0
+        ]
+      ],
+      "evaluate": [
+        [
+          1,
+          0
+        ]
+      ],
+      "state": [
+        [
+          0,
+          0
+        ]
+      ],
+      "materialize": [
+        [
+          1,
+          1
+        ]
+      ],
+      "convert": [
+        [
+          0,
+          0
+        ]
+      ],
+      "summary_insert": [
+        [
+          123,
+          937500
+        ]
+      ],
+      "summary_compress": [
+        [
+          19,
+          1528299
+        ]
+      ],
+      "summary_query": [
+        [
+          1,
+          0
+        ]
+      ],
+      "summary_flush": [
+        [
+          19,
+          937500
+        ]
+      ],
+      "summary_sort": [
+        [
+          19,
+          937500
+        ]
+      ]
+    }
+  },
+  "processes": 54,
+  "samples": 486,
+  "rank_slot_growth_check": {
+    "toolchain": "Rust 1.96.0 native release",
+    "element_size_bytes": 24,
+    "element_alignment_bytes": 8,
+    "capacity_increases_from_empty": {
+      "37500": 15,
+      "50000": 15
+    },
+    "minimum_per_aggregate": 285
+  }
+}
