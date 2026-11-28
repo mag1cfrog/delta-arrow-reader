@@ -2568,6 +2568,19 @@ again. The batch path keeps both lexer instances lazy. Decoded quoted intervals
 use the same rule in the scoped parser. Tests compare the original Rich results
 and error chain and verify the diagnostic lexer stays idle on valid inputs.
 
+### Direct numeric STRING interval units (#1389)
+
+The batch interval parser scans complete numeric unit strings, including
+simple single-quoted strings, without allocating a token stream or syntax
+tree. Quoted input still enters the decoded string's scoped parser, which
+can use the same scanner for runtime numeric units. Single standard units
+use the existing standard conversions. The general parser and the direct
+scanner share checked multi-unit accumulation and the existing precision
+and family selection rules. Rejected syntax or arithmetic falls through
+to the general parser for its original outcome.
+The [Mac profile](benches/reports/interval-1389-macos-profile.md) identifies
+the replaced lexer and grammar work.
+
 ### Unpadded STRING DATE casts (#1389, second round)
 
 Unformatted Spark DATE casts accept a complete four-digit ASCII year with a
