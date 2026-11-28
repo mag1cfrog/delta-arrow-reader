@@ -6,7 +6,7 @@ The [restricted baseline](../reports/functions-1516-macos-restricted.md)
 measured TRY_AVG about 0.671 ns per input row above native AVG in each
 ANSI mode. This profile measures the outer update, merge, state and
 evaluation phases and Spark's ordered Float64 update inside the outer
-update. Give the source guard credit for all consumed input rows.
+update. The preflight checks that the source consumes every input row.
 
 The [manifest](1516-try-avg-profile.json) pins current staging and the
 frozen restricted SQL. The [adapter](try_avg_profile_1516.py) builds a
