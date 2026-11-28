@@ -1,0 +1,17 @@
+{
+  "staging_report_head": "abe7ce476b1548f3dec01caf0b6058941aaaddd8",
+  "staging": "4fd00e7750242475649b4f2e6df9c12aa0b45939",
+  "candidate": "8ad75c1f73ab94891cbfac3f147b1637b77c4035",
+  "blocks": 9,
+  "samples": 9,
+  "preflight_seconds": 3600,
+  "preflight_process_seconds": 300,
+  "process_seconds": 130,
+  "max_seconds": 3600,
+  "case_ids": [
+    "scalar.array.array_insert"
+  ],
+  "restricted_manifest_sha256": "f9116c6ce9385847ef368ca41125fc85d1e0f2fbbca976e7b461a86ebbbcf160",
+  "full_manifest_sha256": "ec6528b17cb072224aec6ea0ea3c1e910b9aa8cf6f5cadb0296f85b3f86f1f06",
+  "schedule_sha256": "e317b6fc4dcd463a155a55b32b8c9b036eaa7419176ff0ed06a2b3e7252d4102"
+}
