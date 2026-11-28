@@ -1,12 +1,61 @@
 // DAR extension to Sail v0.7.1. See crates/delta-arrow-reader-spark-sql/UPSTREAM.md.
 use std::sync::Arc;
 
-use datafusion::arrow::array::{Array, ListArray, MutableArrayData, make_array};
-use datafusion::arrow::buffer::OffsetBuffer;
+use datafusion::arrow::array::{Array, BooleanArray, ListArray, MutableArrayData, make_array};
+use datafusion::arrow::buffer::{BooleanBuffer, OffsetBuffer};
 use datafusion::arrow::datatypes::DataType;
 use datafusion_common::cast::{as_int64_array, as_list_array};
 use datafusion_common::{Result, ScalarValue, exec_datafusion_err, internal_err};
 use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility};
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub(super) struct HasSecondPosition {
+    signature: Signature,
+}
+
+impl Default for HasSecondPosition {
+    fn default() -> Self {
+        Self {
+            signature: Signature::any(1, Volatility::Immutable),
+        }
+    }
+}
+
+impl ScalarUDFImpl for HasSecondPosition {
+    fn name(&self) -> &str {
+        "spark_array_has_second_position"
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arguments: &[DataType]) -> Result<DataType> {
+        Ok(DataType::Boolean)
+    }
+
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+        let [input] = args.args.as_slice() else {
+            return internal_err!("The second-position predicate requires one argument.");
+        };
+        let (lists, scalar) = match input {
+            ColumnarValue::Array(array) => (as_list_array(array.as_ref())?, false),
+            ColumnarValue::Scalar(ScalarValue::List(array)) => (array.as_ref(), true),
+            _ => return internal_err!("The second-position predicate requires a List."),
+        };
+        let offsets = lists.value_offsets();
+        let values =
+            BooleanBuffer::collect_bool(lists.len(), |row| offsets[row + 1] - offsets[row] > 1);
+        let predicate = BooleanArray::new(values, lists.nulls().cloned());
+        Ok(if scalar {
+            ColumnarValue::Scalar(ScalarValue::Boolean(
+                predicate.is_valid(0).then(|| predicate.value(0)),
+            ))
+        } else {
+            ColumnarValue::Array(Arc::new(predicate))
+        })
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub(super) struct InsertBigIntAtSecondPosition {
