@@ -1,0 +1,19 @@
+{
+  "complete": true,
+  "comparisons": {
+    "parsing": {
+      "spark_ns_per_row": 37.095069885253906,
+      "native_ns_per_row": 34.276960372924805,
+      "gap_ns_per_row": 2.929607391357422,
+      "floor_ns_per_row": 0.60455322265625,
+      "decision": "slower"
+    },
+    "formatting": {
+      "spark_ns_per_row": 348.5973663330078,
+      "native_ns_per_row": 239.84917068481445,
+      "gap_ns_per_row": 108.55595207214355,
+      "floor_ns_per_row": 16.206104278564453,
+      "decision": "slower"
+    }
+  }
+}

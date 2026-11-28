@@ -1,0 +1,28 @@
+{
+  "source": "358f70476cee02c19e63007fc66ddf840cc8e537",
+  "source_file": "vendor/sail/crates/sail-function/src/scalar/datetime/spark_date_format.rs",
+  "probe": "date_format_1389/attribute.rs",
+  "probe_sha256": "4a5281bab2f7a58eba30d1e06989ce3569d37b689683c966830cde2860eded29",
+  "test": "scalar::datetime::spark_date_format::date_format_attribution::split_string_parsing_and_formatting",
+  "blocks": 9,
+  "max_process_seconds": 60,
+  "max_seconds": 1200,
+  "rows": 262144,
+  "phases": [
+    "spark_parse",
+    "native_parse",
+    "spark_format",
+    "native_format",
+    "spark_grammar"
+  ],
+  "comparisons": {
+    "parsing": [
+      "spark_parse",
+      "native_parse"
+    ],
+    "formatting": [
+      "spark_format",
+      "native_format"
+    ]
+  }
+}
